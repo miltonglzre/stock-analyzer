@@ -37,6 +37,45 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ── Password gate ─────────────────────────────────────────────────────────────
+def _check_password() -> bool:
+    """
+    Returns True if the user is authenticated.
+    Password is stored in Streamlit Secrets (APP_PASSWORD).
+    If no secret is configured, the app runs open (useful for local dev).
+    """
+    required_pw = st.secrets.get("APP_PASSWORD", None) if hasattr(st, "secrets") else None
+
+    # No password configured → open access (local dev or intentionally public)
+    if not required_pw:
+        return True
+
+    if st.session_state.get("authenticated"):
+        return True
+
+    st.markdown(
+        "<div style='max-width:360px; margin:120px auto; text-align:center;'>"
+        "<div style='font-size:3rem;'>📈</div>"
+        "<h2 style='margin:12px 0 24px;'>Stock Analyzer</h2>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        pw = st.text_input("Password", type="password", label_visibility="collapsed",
+                           placeholder="Enter password")
+        if st.button("Login", type="primary", use_container_width=True):
+            if pw == required_pw:
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("Incorrect password")
+    return False
+
+if not _check_password():
+    st.stop()
+
 # ── Custom CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
