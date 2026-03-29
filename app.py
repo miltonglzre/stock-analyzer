@@ -404,7 +404,7 @@ span[translate="no"] { font-family: 'Material Symbols Rounded', serif !important
     justify-content: center !important;
     gap: 18px !important;
     animation: sm-fade-out 0.5s ease-in 2.4s forwards !important;
-    pointer-events: all !important;
+    pointer-events: none !important;
 }
 #sm-splash-logo {
     font-family: Impact, 'Arial Black', sans-serif !important;
@@ -447,13 +447,7 @@ st.markdown(
     "<div id='sm-splash-logo'>STOCKMANIA</div>"
     "<div id='sm-splash-sub'>PLATAFORMA DE ANÁLISIS DE ACCIONES</div>"
     "<div id='sm-splash-bar-wrap'><div id='sm-splash-bar'></div></div>"
-    "</div>"
-    "<script>"
-    "setTimeout(function(){"
-    "  var s=document.getElementById('sm-splash');"
-    "  if(s) s.style.display='none';"
-    "}, 3000);"
-    "</script>",
+    "</div>",
     unsafe_allow_html=True,
 )
 
