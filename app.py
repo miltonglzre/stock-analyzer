@@ -43,21 +43,50 @@ st.set_page_config(
 )
 
 # ── Password gate ─────────────────────────────────────────────────────────────
+import streamlit.components.v1 as _components
+
 def _check_password() -> bool:
     """
     Returns True if the user is authenticated.
-    Password is stored in Streamlit Secrets (APP_PASSWORD).
-    If no secret is configured, the app runs open (useful for local dev).
+    Auth persists across page refreshes (stored in browser sessionStorage).
+    Clears when the tab is closed.
     """
-    required_pw = st.secrets.get("APP_PASSWORD", None) if hasattr(st, "secrets") else None
+    required_pw = None
+    try:
+        required_pw = st.secrets.get("APP_PASSWORD", None)
+    except Exception:
+        pass
 
-    # No password configured → open access (local dev or intentionally public)
     if not required_pw:
         return True
 
+    # Already authenticated in this Python session
     if st.session_state.get("authenticated"):
         return True
 
+    # JS bridge: if sessionStorage has auth token → add ?_sm=ok to URL → Streamlit sees it
+    _components.html("""
+    <script>
+    (function() {
+        try {
+            if (sessionStorage.getItem('_sm_auth') === '1') {
+                var url = new URL(window.parent.location.href);
+                if (url.searchParams.get('_sm') !== 'ok') {
+                    url.searchParams.set('_sm', 'ok');
+                    window.parent.location.replace(url.toString());
+                }
+            }
+        } catch(e) {}
+    })();
+    </script>
+    """, height=0, scrolling=False)
+
+    # If JS already set the param on a previous run, trust it
+    if st.query_params.get("_sm") == "ok":
+        st.session_state.authenticated = True
+        return True
+
+    # ── Login form ──────────────────────────────────────────────────────────
     st.markdown(
         "<div style='max-width:360px; margin:120px auto; text-align:center;'>"
         "<div style='font-size:3rem;'>📈</div>"
@@ -65,7 +94,6 @@ def _check_password() -> bool:
         "</div>",
         unsafe_allow_html=True,
     )
-
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         pw = st.text_input("Password", type="password", label_visibility="collapsed",
@@ -73,13 +101,45 @@ def _check_password() -> bool:
         if st.button("Login", type="primary", use_container_width=True):
             if pw == required_pw:
                 st.session_state.authenticated = True
-                st.rerun()
+                # Save to sessionStorage + redirect to ?_sm=ok (persists on refresh)
+                _components.html("""
+                <script>
+                (function() {
+                    try {
+                        sessionStorage.setItem('_sm_auth', '1');
+                        var url = new URL(window.parent.location.href);
+                        url.searchParams.set('_sm', 'ok');
+                        window.parent.location.replace(url.toString());
+                    } catch(e) {}
+                })();
+                </script>
+                """, height=0, scrolling=False)
             else:
                 st.error("Incorrect password")
     return False
 
 if not _check_password():
     st.stop()
+
+# ── JS: hide sidebar toggle text artifact ────────────────────────────────────
+_components.html("""
+<script>
+(function() {
+    function hide() {
+        try {
+            var doc = window.parent.document;
+            doc.querySelectorAll(
+                '[data-testid="collapsedControl"],' +
+                '[data-testid="stSidebarCollapsedControl"],' +
+                '[data-testid*="ollapsedControl"]'
+            ).forEach(function(el) { el.style.cssText = 'display:none!important'; });
+        } catch(e) {}
+    }
+    hide();
+    setInterval(hide, 800);
+})();
+</script>
+""", height=0, scrolling=False)
 
 # ── Custom CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
