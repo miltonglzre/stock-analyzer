@@ -1925,19 +1925,7 @@ def render_home_tab():
         if mkt["is_open"] else
         f"<span class='market-closed'>○ {_status_labels.get(mkt['status'], mkt['status'].replace('_',' ').upper())}</span>"
     )
-    # ── STOCKMANIA logo — centered ─────────────────────────────────────────────
-    st.markdown(
-        "<div style='text-align:center;padding:6px 0 14px;'>"
-        "<span style='"
-        "font-size:2.8rem;font-weight:900;letter-spacing:2px;"
-        "color:#f5a623;"
-        "-webkit-text-stroke:2px #b36c00;"
-        "text-shadow:0 3px 0 #7a4d00,0 6px 18px #00000099;"
-        "font-family:Impact,Arial Black,sans-serif;"
-        "line-height:1;'>STOCKMANIA</span>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
+
 
     # ── Page header (date + market status) ────────────────────────────────────
     st.markdown(
