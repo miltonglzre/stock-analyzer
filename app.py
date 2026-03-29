@@ -534,6 +534,11 @@ def build_chart(df: pd.DataFrame, technicals: dict) -> go.Figure:
 _REC_ES   = {"Buy": "Comprar",  "Sell": "Vender",  "Wait": "Esperar"}
 _VERD_ES  = {"Bullish": "Alcista", "Bearish": "Bajista", "Neutral": "Neutral"}
 _LEVEL_ES = {"High": "Alto", "Moderate": "Moderado", "Low": "Bajo"}
+_FG_ES    = {
+    "Extreme Fear": "Miedo Extremo", "Fear": "Miedo",
+    "Neutral": "Neutral",
+    "Greed": "Codicia", "Extreme Greed": "Codicia Extrema",
+}
 
 # ── Render helpers ─────────────────────────────────────────────────────────────
 
@@ -979,7 +984,7 @@ def _rec_badge(rec: str) -> str:
     return (
         f"<span style='background:{color}22;border:1px solid {color};"
         f"border-radius:4px;padding:2px 8px;color:{color};"
-        f"font-weight:700;font-size:0.85rem;'>{rec}</span>"
+        f"font-weight:700;font-size:0.85rem;'>{_REC_ES.get(rec, rec)}</span>"
     )
 
 
@@ -1707,7 +1712,7 @@ def render_home_tab():
 
     with col_fg:
         fg_score  = fg.get("score", 50)
-        fg_rating = fg.get("rating", "Neutral")
+        fg_rating = _FG_ES.get(fg.get("rating", "Neutral"), fg.get("rating", "Neutral"))
         fg_color  = fg.get("color", "#aaa")
         st.markdown(
             f"<div style='background:linear-gradient(145deg,#0d1428,#090d1e);"
@@ -1850,7 +1855,7 @@ def render_home_tab():
                     f"<div style='margin-top:14px;padding-top:12px;border-top:1px solid #1a2040;'>"
                     f"<div style='font-size:1.2rem;font-weight:700;color:#ccd6f6;'>${p.get('current_price',0):.2f}</div>"
                     f"<div style='font-size:1.0rem;font-weight:800;color:{pnlcol};'>{pnl:+.2f}%</div>"
-                    f"<div style='font-size:0.75rem;color:#4a5580;margin-top:6px;'>Score {score:+.3f} · {p.get('confidence_pct',0)}% conf</div>"
+                    f"<div style='font-size:0.75rem;color:#4a5580;margin-top:6px;'>Score {score:+.3f} · {p.get('confidence_pct',0)}% confianza</div>"
                     f"</div>"
                     f"</div>",
                     unsafe_allow_html=True,
@@ -1871,7 +1876,7 @@ def render_home_tab():
                 f"<div>"
                 f"<span style='color:{outcome_col};font-weight:800;font-size:1rem;'>{icon}</span>"
                 f" <strong style='color:#ccd6f6;'>{p['ticker']}</strong>"
-                f" <span style='color:#4a5580;font-size:0.8rem;'>{p['recommendation']} · Entrada ${p.get('entry_price',0):.2f}</span>"
+                f" <span style='color:#4a5580;font-size:0.8rem;'>{_REC_ES.get(p['recommendation'], p['recommendation'])} · Entrada ${p.get('entry_price',0):.2f}</span>"
                 f"</div>"
                 f"<div style='color:{outcome_col};font-weight:800;font-size:1.0rem;'>{p.get('pnl_pct',0):+.2f}%</div>"
                 f"</div>",
@@ -1957,7 +1962,7 @@ def render_scanner_tab():
 
     with col_fg:
         fg_score  = fg.get("score", 50)
-        fg_rating = fg.get("rating", "Neutral")
+        fg_rating = _FG_ES.get(fg.get("rating", "Neutral"), fg.get("rating", "Neutral"))
         fg_color  = fg.get("color", "#aaa")
         fg_prev   = fg.get("prev_close", fg_score)
         fg_delta  = fg_score - fg_prev
@@ -1982,12 +1987,13 @@ def render_scanner_tab():
             dow_adj   = dow.get("adj", 0)
             dow_bcol  = {"bullish": "#00d4aa", "bearish": "#ef5350", "neutral": "#f39c12"}.get(dow_bias, "#aaa")
             adj_str   = f"{dow_adj:+.0%}" if dow_adj != 0 else "neutral"
+            dow_bias_es = {"bullish": "alcista", "bearish": "bajista", "neutral": "neutral"}.get(dow_bias, dow_bias)
             st.markdown(
                 f"<div style='background:#0e1117;border:1px solid {dow_bcol}33;"
                 f"border-radius:10px;padding:10px 14px;height:100%;'>"
                 f"<div style='font-size:0.72rem;color:#666;letter-spacing:0.5px;'>EFECTO DÍA DE SEMANA</div>"
                 f"<div style='font-size:1.2rem;font-weight:900;color:{dow_bcol};'>"
-                f"{dow_name} <span style='font-size:0.85rem;'>({adj_str} bias)</span></div>"
+                f"{dow_name} <span style='font-size:0.85rem;'>({adj_str} {dow_bias_es})</span></div>"
                 f"<div style='color:#888;font-size:0.78rem;margin-top:3px;'>{dow_note}</div>"
                 f"</div>",
                 unsafe_allow_html=True,
@@ -2061,7 +2067,7 @@ def render_scanner_tab():
                     outcome_col = "#00d4aa" if p.get("outcome") == "win" else "#ef5350"
                     st.markdown(
                         f"{_status_badge(p['status'])} &nbsp;"
-                        f"**{p['ticker']}** {p['recommendation']} · "
+                        f"**{p['ticker']}** {_REC_ES.get(p['recommendation'], p['recommendation'])} · "
                         f"Entrada ${p.get('entry_price',0):.2f} → "
                         f"Salida ${p.get('current_price',0):.2f} · "
                         f"<span style='color:{outcome_col};font-weight:700;'>"
