@@ -285,8 +285,18 @@ div[data-testid="metric-container"] {
 hr { border-color: #1a2040 !important; margin: 18px 0 !important; }
 
 /* ── Hide sidebar toggle button (removes keyboard_double_arrow_right text) ── */
-[data-testid="collapsedControl"] { display: none !important; }
-button[kind="header"] { display: none !important; }
+[data-testid="collapsedControl"],
+[data-testid="stSidebarCollapsedControl"],
+[data-testid*="collapsed"],
+[data-testid*="Collapsed"] {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    position: absolute !important;
+    left: -9999px !important;
+}
 
 /* ── Expanders ── */
 div[data-testid="stExpander"] {
