@@ -333,6 +333,11 @@ button[kind="primary"]:hover { box-shadow: 0 6px 24px #00d4aa50 !important; tran
 [data-testid="stInfo"]    { background: #0d1a2e !important; border-color: #4f9cf9 !important; color: #8892b0 !important; }
 [data-testid="stWarning"] { background: #1a120a !important; border-color: #f39c12 !important; }
 
+/* ── AG Grid dataframe: ocultar ícono content_copy en headers ── */
+.ag-header-cell-label .ag-icon-none,
+.ag-header-cell-label span[class*="material"],
+.ag-header-icon { display: none !important; }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -949,6 +954,86 @@ def render_learning_tab():
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 
 
+
+# ── AG Grid menu translation (MutationObserver) ──────────────────────────────
+try:
+    import streamlit.components.v1 as _components
+    _components.html("""
+<script>
+(function() {
+  const T = {
+    // Column header menu
+    "Sort Ascending":           "Ordenar Ascendente",
+    "Sort Descending":          "Ordenar Descendente",
+    "Sort Ascending (Multi)":   "Asc. (Multi)",
+    "Sort Descending (Multi)":  "Desc. (Multi)",
+    "Reset Sort":               "Quitar orden",
+    "Pin Column":               "Fijar columna",
+    "Pin Left":                 "Fijar izquierda",
+    "Pin Right":                "Fijar derecha",
+    "No Pin":                   "Sin fijar",
+    "Hide Column":              "Ocultar columna",
+    "Autosize This Column":     "Autoajustar columna",
+    "Autosize All Columns":     "Autoajustar todo",
+    "Reset Columns":            "Resetear columnas",
+    "Columns":                  "Columnas",
+    "Filters":                  "Filtros",
+    "Contains":                 "Contiene",
+    "Not Contains":             "No contiene",
+    "Equals":                   "Igual a",
+    "Not Equal":                "Diferente de",
+    "Starts With":              "Empieza con",
+    "Ends With":                "Termina con",
+    "Blank":                    "Vacío",
+    "Not Blank":                "No vacío",
+    "Filter...":                "Filtrar...",
+    "Resize Column":            "Redimensionar",
+    "Choose columns":           "Elegir columnas",
+    // Sort indicators
+    "w_up":   "▲",
+    "_down":  "▼",
+  };
+
+  function translateNode(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const trimmed = node.textContent.trim();
+      if (T[trimmed]) node.textContent = node.textContent.replace(trimmed, T[trimmed]);
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      node.childNodes.forEach(translateNode);
+    }
+  }
+
+  const doc = window.parent ? window.parent.document : document;
+  const observer = new MutationObserver(function(mutations) {
+    mutations.forEach(function(m) {
+      m.addedNodes.forEach(function(node) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          // AG Grid column menu
+          if (node.classList && (
+            node.classList.contains('ag-menu') ||
+            node.classList.contains('ag-popup') ||
+            node.querySelector && node.querySelector('.ag-menu-list, .ag-menu-option-text')
+          )) {
+            translateNode(node);
+          }
+          // Also catch any ag-menu-option-text directly
+          const texts = node.querySelectorAll ? node.querySelectorAll('.ag-menu-option-text, .ag-menu-option, .ag-column-drop-cell-text') : [];
+          texts.forEach(translateNode);
+        }
+      });
+    });
+  });
+
+  doc.addEventListener('DOMContentLoaded', function() {
+    observer.observe(doc.body, { childList: true, subtree: true });
+  });
+  // Also start immediately in case DOM is already ready
+  if (doc.body) observer.observe(doc.body, { childList: true, subtree: true });
+})();
+</script>
+""", height=0)
+except Exception:
+    pass  # Non-critical: falls back to English menu if components.html unavailable
 
 # ── Main layout ────────────────────────────────────────────────────────────────
 
