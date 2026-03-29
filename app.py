@@ -291,36 +291,6 @@ div[data-testid="stExpander"] {
     border-radius: 12px !important;
 }
 
-/* ── Sidebar radio → vertical nav ── */
-[data-testid="stSidebar"] [data-testid="stRadio"] > label { display: none; }
-[data-testid="stSidebar"] [data-testid="stRadio"] > div   { gap: 3px !important; }
-[data-testid="stSidebar"] [data-testid="stRadio"] label {
-    display: flex !important;
-    align-items: center !important;
-    padding: 10px 14px !important;
-    border-radius: 10px !important;
-    border: 1px solid transparent !important;
-    color: #4a5580 !important;
-    font-weight: 500 !important;
-    font-size: 0.9rem !important;
-    cursor: pointer !important;
-    transition: background 0.15s, color 0.15s !important;
-    margin: 0 !important;
-    width: 100% !important;
-}
-[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
-    background: #ffffff08 !important;
-    color: #8892b0 !important;
-}
-[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {
-    background: linear-gradient(135deg,#4f9cf918,#00d4aa0e) !important;
-    border-color: #4f9cf930 !important;
-    color: #ccd6f6 !important;
-    box-shadow: 0 2px 10px #4f9cf910 !important;
-}
-[data-testid="stSidebar"] [data-testid="stRadio"] input[type="radio"] {
-    display: none !important;
-}
 
 /* ── Buttons ── */
 .stButton > button {
@@ -1015,21 +985,6 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
 
-    # ── Vertical navigation ──────────────────────────────────────────────────────
-    st.markdown(
-        "<div style='font-size:0.68rem;color:#2a3a5a;text-transform:uppercase;"
-        "letter-spacing:0.8px;margin:4px 0 8px 4px;'>NAVEGACIÓN</div>",
-        unsafe_allow_html=True,
-    )
-    page = st.radio(
-        "nav",
-        options=["🏠  Home", "🔍  Scanner", "📊  Análisis", "💼  Trades", "🧠  Learning"],
-        label_visibility="collapsed",
-        key="nav_page",
-    )
-
-    st.divider()
-
     # ── Auto-refresh ────────────────────────────────────────────────────────────
     auto_refresh = st.toggle("Auto-refresh (5 min)", value=False)
     if auto_refresh:
@@ -1052,8 +1007,9 @@ with st.sidebar:
 
 # ── Main layout ────────────────────────────────────────────────────────────────
 
-# page is set by the sidebar radio — default to Home on first load
-_page = st.session_state.get("nav_page", "🏠  Home")
+tab0, tab1, tab2, tab3, tab4 = st.tabs(
+    ["🏠 Home", "🔍 Scanner", "📊 Análisis", "💼 Trades", "🧠 Learning"]
+)
 
 # ── Tab 1: Market Scanner ─────────────────────────────────────────────────────
 
@@ -2337,14 +2293,14 @@ def render_scanner_tab():
             )
 
 
-if _page == "🏠  Home":
+with tab0:
     render_home_tab()
 
-elif _page == "🔍  Scanner":
+with tab1:
     render_scanner_tab()
 
-elif _page == "📊  Análisis":
-    # ── Ticker input lives here now ────────────────────────────────────────────
+with tab2:
+    # ── Ticker input ───────────────────────────────────────────────────────────
     st.markdown(
         "<div class='section-header' style='margin-top:0;'>📊 Análisis de Acción</div>",
         unsafe_allow_html=True,
@@ -2437,8 +2393,8 @@ elif _page == "📊  Análisis":
             f"Yahoo Finance + Google News RSS"
         )
 
-elif _page == "💼  Trades":
+with tab3:
     render_trades_tab()
 
-elif _page == "🧠  Learning":
+with tab4:
     render_learning_tab()
