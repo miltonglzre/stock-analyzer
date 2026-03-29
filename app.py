@@ -507,8 +507,25 @@ def fetch_earnings_dates(tickers: tuple) -> dict:
 
 # ── Cached data fetchers ───────────────────────────────────────────────────────
 
-@st.cache_data(ttl=300, show_spinner=False)
+def _yf_with_retry(fn, *args, retries=3, delay=4, **kwargs):
+    """Call a yfinance-dependent function with retry on rate limit errors."""
+    import time
+    for attempt in range(retries):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            msg = str(e).lower()
+            if "too many" in msg or "rate" in msg or "429" in msg or "limited" in msg:
+                if attempt < retries - 1:
+                    time.sleep(delay * (attempt + 1))
+                    continue
+            raise
+    return fn(*args, **kwargs)
+
+
+@st.cache_data(ttl=900, show_spinner=False)   # 15 min cache — reduce yfinance calls
 def cached_run_analysis(ticker: str) -> dict:
+    import time
     from fetch_company_overview import fetch_company_overview
     from fetch_fundamentals import fetch_fundamentals
     from fetch_news import fetch_news
@@ -517,12 +534,17 @@ def cached_run_analysis(ticker: str) -> dict:
     from fetch_opportunities import fetch_opportunities
     from decision_engine import make_decision
 
-    overview      = fetch_company_overview(ticker)
-    fundamentals  = fetch_fundamentals(ticker)
-    news          = fetch_news(ticker, overview.get("name", ""))
-    technicals    = fetch_technicals(ticker)
-    risks         = fetch_risk_factors(ticker)
-    opportunities = fetch_opportunities(ticker)
+    overview      = _yf_with_retry(fetch_company_overview, ticker)
+    time.sleep(0.5)
+    fundamentals  = _yf_with_retry(fetch_fundamentals, ticker)
+    time.sleep(0.5)
+    news          = _yf_with_retry(fetch_news, ticker, overview.get("name", ""))
+    time.sleep(0.5)
+    technicals    = _yf_with_retry(fetch_technicals, ticker)
+    time.sleep(0.5)
+    risks         = _yf_with_retry(fetch_risk_factors, ticker)
+    time.sleep(0.5)
+    opportunities = _yf_with_retry(fetch_opportunities, ticker)
     decision      = make_decision(ticker)
 
     return dict(
@@ -698,25 +720,34 @@ def render_header(ticker, overview, decision):
 
 
 def render_extended_hours(ticker: str, current_price: float):
-    """Show pre/post market prices if available."""
+    """Show pre/post market prices. Always renders a row with available data."""
     try:
         t = yf.Ticker(ticker)
         fi = t.fast_info
         pre  = getattr(fi, "pre_market_price",  None)
         post = getattr(fi, "post_market_price", None)
-        if not pre and not post:
-            return
+        prev_close = getattr(fi, "previous_close", None) or getattr(fi, "regular_market_previous_close", None)
+
         items = []
-        if pre:
+        if pre and pre > 0:
             chg = (pre - current_price) / current_price * 100 if current_price else 0
-            items.append(("Pre-market", f"${pre:,.2f}", f"{chg:+.2f}%"))
-        if post:
+            items.append(("🌅 Pre-market", f"${pre:,.2f}", f"{chg:+.2f}%"))
+        else:
+            items.append(("🌅 Pre-market", "No disponible", "Mercado cerrado"))
+
+        if post and post > 0:
             chg = (post - current_price) / current_price * 100 if current_price else 0
-            items.append(("Post-market", f"${post:,.2f}", f"{chg:+.2f}%"))
-        if items:
-            cols = st.columns(len(items) + 1)
-            for col, (label, val, delta) in zip(cols, items):
-                col.metric(label, val, delta)
+            items.append(("🌙 Post-market", f"${post:,.2f}", f"{chg:+.2f}%"))
+        else:
+            items.append(("🌙 Post-market", "No disponible", "Mercado cerrado"))
+
+        if prev_close and prev_close > 0:
+            chg = (current_price - prev_close) / prev_close * 100 if current_price else 0
+            items.append(("📅 Cierre anterior", f"${prev_close:,.2f}", f"{chg:+.2f}% hoy"))
+
+        cols = st.columns(len(items))
+        for col, (label, val, delta) in zip(cols, items):
+            col.metric(label, val, delta)
     except Exception:
         pass
 

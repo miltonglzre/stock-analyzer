@@ -51,17 +51,24 @@ _DOW_DATA = {
 }
 
 
+_DOW_NAMES_ES = {
+    "Monday": "Lunes", "Tuesday": "Martes", "Wednesday": "Miércoles",
+    "Thursday": "Jueves", "Friday": "Viernes", "Saturday": "Sábado", "Sunday": "Domingo",
+}
+
 def get_dow_context() -> dict:
     """Return today's day-of-week seasonality context."""
     today = datetime.now()
-    dow   = today.weekday()   # 0=Mon … 4=Fri  (5/6=weekend, market closed)
-    if dow >= 5:
-        # Weekend — use Friday data for planning purposes
-        dow = 4
-    d = _DOW_DATA[dow]
+    dow   = today.weekday()   # 0=Mon … 4=Fri, 5=Sat, 6=Sun
+    real_name = today.strftime("%A")  # nombre real del día
+    # For market seasonality data, use Friday on weekends
+    market_dow = min(dow, 4)
+    d = _DOW_DATA[market_dow]
     return {
         "weekday":    dow,
-        "name":       d["name"],
+        "name":       _DOW_NAMES_ES.get(real_name, real_name),
+        "name_en":    real_name,
+        "is_weekend": dow >= 5,
         "adj":        d["adj"],
         "bias":       d["bias"],
         "note":       d["note"],
