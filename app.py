@@ -334,9 +334,13 @@ button[kind="primary"]:hover { box-shadow: 0 6px 24px #00d4aa50 !important; tran
 [data-testid="stInfo"]    { background: #0d1a2e !important; border-color: #4f9cf9 !important; color: #8892b0 !important; }
 [data-testid="stWarning"] { background: #1a120a !important; border-color: #f39c12 !important; }
 
+/* ── TEST DE CSS - BORRAR DESPUÉS ── */
+[data-testid="stAppViewContainer"] { border: 4px solid red !important; }
+
 /* ── Íconos Material que renderizan como texto ── */
 [data-testid="stIconMaterial"],
 [data-testid="stExpanderToggleIcon"] { display: none !important; }
+span[translate="no"] { font-family: 'Material Symbols Rounded', serif !important; font-feature-settings: 'liga' !important; }
 /* AG Grid: ocultar íconos en headers y menú */
 .ag-icon { display: none !important; }
 .ag-header-cell-label span[class*="material"] { display: none !important; }
