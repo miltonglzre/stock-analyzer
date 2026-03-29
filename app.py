@@ -36,7 +36,7 @@ from fetch_fear_greed import fetch_fear_greed
 
 # ── Page config (must be the FIRST Streamlit call) ────────────────────────────
 st.set_page_config(
-    page_title="Stock Analyzer",
+    page_title="STOCKMANIA",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -61,7 +61,7 @@ def _check_password() -> bool:
     st.markdown(
         "<div style='max-width:360px; margin:120px auto; text-align:center;'>"
         "<div style='font-size:3rem;'>📈</div>"
-        "<h2 style='margin:12px 0 24px;'>Stock Analyzer</h2>"
+        "<h2 style='margin:12px 0 24px;'>STOCKMANIA</h2>"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -969,16 +969,16 @@ def render_learning_tab():
 with st.sidebar:
     # ── Logo / brand ───────────────────────────────────────────────────────────
     st.markdown(
-        "<div style='padding:4px 0 20px;'>"
-        "<div style='display:flex;align-items:center;gap:10px;'>"
-        "<div style='width:36px;height:36px;background:linear-gradient(135deg,#00d4aa,#00a882);"
-        "border-radius:10px;display:flex;align-items:center;justify-content:center;"
-        "font-size:1.1rem;box-shadow:0 4px 14px #00d4aa35;'>📈</div>"
-        "<div>"
-        "<div style='font-size:1.05rem;font-weight:800;color:#ccd6f6;'>Stock Analyzer</div>"
-        "<div style='font-size:0.68rem;color:#4a5580;letter-spacing:0.5px;'>WAT Framework</div>"
-        "</div>"
-        "</div>"
+        "<div style='padding:4px 0 20px;text-align:center;'>"
+        "<div style='display:inline-block;"
+        "font-size:1.55rem;font-weight:900;letter-spacing:1px;"
+        "color:#f5a623;"
+        "-webkit-text-stroke:2px #c47d0a;"
+        "text-shadow:0 2px 0 #7a4d00,0 4px 8px #00000088,0 0 20px #f5a62340;"
+        "font-family:Impact,\"Arial Black\",sans-serif !important;"
+        "line-height:1;'>STOCKMANIA</div>"
+        "<div style='font-size:0.62rem;color:#4a5580;letter-spacing:1.5px;"
+        "text-transform:uppercase;margin-top:4px;'>Trading Intelligence</div>"
         "</div>",
         unsafe_allow_html=True,
     )
