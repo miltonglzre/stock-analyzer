@@ -334,18 +334,12 @@ button[kind="primary"]:hover { box-shadow: 0 6px 24px #00d4aa50 !important; tran
 [data-testid="stInfo"]    { background: #0d1a2e !important; border-color: #4f9cf9 !important; color: #8892b0 !important; }
 [data-testid="stWarning"] { background: #1a120a !important; border-color: #f39c12 !important; }
 
-/* ── Íconos Material que renderizan como texto (fuente no cargada) ── */
-/* Expander toggle: Streamlit 1.55 usa data-testid="stIconMaterial" */
-[data-testid="stIconMaterial"] {
-    font-family: 'Material Symbols Rounded' !important;
-}
-/* AG Grid: ocultar íconos en headers y menú de columna */
-.ag-header-cell-label .ag-icon-none,
-.ag-header-cell-label span[class*="material"],
-.ag-header-icon { display: none !important; }
-.ag-menu-option-icon,
-.ag-popup .ag-icon,
-.ag-menu .ag-icon { display: none !important; width: 0 !important; min-width: 0 !important; }
+/* ── Íconos Material que renderizan como texto ── */
+[data-testid="stIconMaterial"],
+[data-testid="stExpanderToggleIcon"] { display: none !important; }
+/* AG Grid: ocultar íconos en headers y menú */
+.ag-icon { display: none !important; }
+.ag-header-cell-label span[class*="material"] { display: none !important; }
 
 </style>
 """, unsafe_allow_html=True)
