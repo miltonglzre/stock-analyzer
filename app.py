@@ -507,25 +507,32 @@ def fetch_earnings_dates(tickers: tuple) -> dict:
 
 # ── Cached data fetchers ───────────────────────────────────────────────────────
 
-def _yf_with_retry(fn, *args, retries=3, delay=4, **kwargs):
-    """Call a yfinance-dependent function with retry on rate limit errors."""
+class _RateLimitError(Exception):
+    """Raised when Yahoo Finance rate-limits us."""
+    pass
+
+
+def _run_safe(fn, *args, **kwargs):
+    """Run a yfinance fetch; convert rate-limit errors to _RateLimitError."""
     import time
-    for attempt in range(retries):
+    try:
+        time.sleep(0.6)   # small spacing between calls
+        return fn(*args, **kwargs)
+    except Exception as e:
+        msg = str(e).lower()
+        if "too many" in msg or "rate" in msg or "429" in msg or "limited" in msg:
+            raise _RateLimitError(str(e))
         try:
-            return fn(*args, **kwargs)
-        except Exception as e:
-            msg = str(e).lower()
-            if "too many" in msg or "rate" in msg or "429" in msg or "limited" in msg:
-                if attempt < retries - 1:
-                    time.sleep(delay * (attempt + 1))
-                    continue
-            raise
-    return fn(*args, **kwargs)
+            from yfinance.exceptions import YFRateLimitError
+            if isinstance(e, YFRateLimitError):
+                raise _RateLimitError(str(e))
+        except ImportError:
+            pass
+        raise
 
 
-@st.cache_data(ttl=900, show_spinner=False)   # 15 min cache — reduce yfinance calls
+@st.cache_data(ttl=900, show_spinner=False)
 def cached_run_analysis(ticker: str) -> dict:
-    import time
     from fetch_company_overview import fetch_company_overview
     from fetch_fundamentals import fetch_fundamentals
     from fetch_news import fetch_news
@@ -534,17 +541,12 @@ def cached_run_analysis(ticker: str) -> dict:
     from fetch_opportunities import fetch_opportunities
     from decision_engine import make_decision
 
-    overview      = _yf_with_retry(fetch_company_overview, ticker)
-    time.sleep(0.5)
-    fundamentals  = _yf_with_retry(fetch_fundamentals, ticker)
-    time.sleep(0.5)
-    news          = _yf_with_retry(fetch_news, ticker, overview.get("name", ""))
-    time.sleep(0.5)
-    technicals    = _yf_with_retry(fetch_technicals, ticker)
-    time.sleep(0.5)
-    risks         = _yf_with_retry(fetch_risk_factors, ticker)
-    time.sleep(0.5)
-    opportunities = _yf_with_retry(fetch_opportunities, ticker)
+    overview      = _run_safe(fetch_company_overview, ticker)
+    fundamentals  = _run_safe(fetch_fundamentals, ticker)
+    news          = _run_safe(fetch_news, ticker, overview.get("name", ""))
+    technicals    = _run_safe(fetch_technicals, ticker)
+    risks         = _run_safe(fetch_risk_factors, ticker)
+    opportunities = _run_safe(fetch_opportunities, ticker)
     decision      = make_decision(ticker)
 
     return dict(
@@ -2551,8 +2553,22 @@ with tab2:
             except SystemExit:
                 st.error(f"Ticker '{ticker_input}' no encontrado. Verifica el símbolo.")
                 st.stop()
+            except _RateLimitError:
+                st.warning(
+                    "⏳ **Yahoo Finance está limitando las consultas.** "
+                    "Espera 2-3 minutos e intenta de nuevo. "
+                    "Esto ocurre cuando se hacen muchas búsquedas seguidas."
+                )
+                st.stop()
             except Exception as e:
-                st.error(f"Error en análisis: {e}")
+                msg = str(e).lower()
+                if "too many" in msg or "rate" in msg or "limited" in msg:
+                    st.warning(
+                        "⏳ **Yahoo Finance está limitando las consultas.** "
+                        "Espera 2-3 minutos e intenta de nuevo."
+                    )
+                else:
+                    st.error(f"Error en análisis: {e}")
                 st.stop()
 
         render_header(ticker_input, data["overview"], data["decision"])
