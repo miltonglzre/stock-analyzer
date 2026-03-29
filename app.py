@@ -284,6 +284,41 @@ div[data-testid="metric-container"] {
 /* ── Dividers ── */
 hr { border-color: #1a2040 !important; margin: 18px 0 !important; }
 
+/* ── Lock sidebar open — hide collapse button ── */
+[data-testid="collapsedControl"] { display: none !important; }
+section[data-testid="stSidebar"] { min-width: 220px !important; width: 220px !important; }
+
+/* ── Sidebar radio → vertical nav ── */
+[data-testid="stSidebar"] [data-testid="stRadio"] > label { display: none; }
+[data-testid="stSidebar"] [data-testid="stRadio"] > div   { gap: 3px !important; }
+[data-testid="stSidebar"] [data-testid="stRadio"] label {
+    display: flex !important;
+    align-items: center !important;
+    padding: 10px 14px !important;
+    border-radius: 10px !important;
+    border: 1px solid transparent !important;
+    color: #4a5580 !important;
+    font-weight: 500 !important;
+    font-size: 0.9rem !important;
+    cursor: pointer !important;
+    transition: background 0.15s, color 0.15s !important;
+    margin: 0 !important;
+    width: 100% !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+    background: #ffffff08 !important;
+    color: #8892b0 !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {
+    background: linear-gradient(135deg,#4f9cf918,#00d4aa0e) !important;
+    border-color: #4f9cf930 !important;
+    color: #ccd6f6 !important;
+    box-shadow: 0 2px 10px #4f9cf910 !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] input[type="radio"] {
+    display: none !important;
+}
+
 /* ── Expanders ── */
 div[data-testid="stExpander"] {
     background: #0d1428;
@@ -985,6 +1020,21 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
 
+    # ── Vertical navigation ──────────────────────────────────────────────────────
+    st.markdown(
+        "<div style='font-size:0.68rem;color:#2a3a5a;text-transform:uppercase;"
+        "letter-spacing:0.8px;margin:4px 0 8px 4px;'>NAVEGACIÓN</div>",
+        unsafe_allow_html=True,
+    )
+    st.radio(
+        "nav",
+        options=["🏠  Home", "🔍  Scanner", "📊  Análisis", "💼  Trades", "🧠  Learning"],
+        label_visibility="collapsed",
+        key="nav_page",
+    )
+
+    st.divider()
+
     # ── Auto-refresh ────────────────────────────────────────────────────────────
     auto_refresh = st.toggle("Auto-refresh (5 min)", value=False)
     if auto_refresh:
@@ -1007,9 +1057,7 @@ with st.sidebar:
 
 # ── Main layout ────────────────────────────────────────────────────────────────
 
-tab0, tab1, tab2, tab3, tab4 = st.tabs(
-    ["🏠 Home", "🔍 Scanner", "📊 Análisis", "💼 Trades", "🧠 Learning"]
-)
+_page = st.session_state.get("nav_page", "🏠  Home")
 
 # ── Tab 1: Market Scanner ─────────────────────────────────────────────────────
 
@@ -2293,14 +2341,13 @@ def render_scanner_tab():
             )
 
 
-with tab0:
+if _page == "🏠  Home":
     render_home_tab()
 
-with tab1:
+elif _page == "🔍  Scanner":
     render_scanner_tab()
 
-with tab2:
-    # ── Ticker input ───────────────────────────────────────────────────────────
+elif _page == "📊  Análisis":
     st.markdown(
         "<div class='section-header' style='margin-top:0;'>📊 Análisis de Acción</div>",
         unsafe_allow_html=True,
@@ -2393,8 +2440,8 @@ with tab2:
             f"Yahoo Finance + Google News RSS"
         )
 
-with tab3:
+elif _page == "💼  Trades":
     render_trades_tab()
 
-with tab4:
+elif _page == "🧠  Learning":
     render_learning_tab()
