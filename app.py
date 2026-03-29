@@ -333,10 +333,19 @@ button[kind="primary"]:hover { box-shadow: 0 6px 24px #00d4aa50 !important; tran
 [data-testid="stInfo"]    { background: #0d1a2e !important; border-color: #4f9cf9 !important; color: #8892b0 !important; }
 [data-testid="stWarning"] { background: #1a120a !important; border-color: #f39c12 !important; }
 
-/* ── AG Grid dataframe: ocultar ícono content_copy en headers ── */
+/* ── AG Grid: ocultar íconos Material que renderizan como texto ── */
 .ag-header-cell-label .ag-icon-none,
 .ag-header-cell-label span[class*="material"],
 .ag-header-icon { display: none !important; }
+.ag-menu-option-icon,
+.ag-popup .ag-icon,
+.ag-menu .ag-icon { display: none !important; width: 0 !important; min-width: 0 !important; }
+
+/* ── Expanders: ocultar ícono toggle que renderiza como texto ── */
+[data-testid="stExpanderToggleIcon"] { display: none !important; }
+[data-testid="stExpander"] summary span.material-icons,
+[data-testid="stExpander"] summary span.material-symbols-rounded,
+[data-testid="stExpander"] summary span[class*="material"] { display: none !important; }
 
 </style>
 """, unsafe_allow_html=True)
