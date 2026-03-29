@@ -342,6 +342,34 @@ span[translate="no"] { font-family: 'Material Symbols Rounded', serif !important
 .ag-icon { display: none !important; }
 .ag-header-cell-label span[class*="material"] { display: none !important; }
 
+/* ── Sticky STOCKMANIA header ── */
+[data-testid="stHeader"] {
+    background: rgba(10,14,26,0.97) !important;
+    backdrop-filter: blur(12px) !important;
+    border-bottom: 1px solid #1a2040 !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 9998 !important;
+    display: flex !important;
+    align-items: center !important;
+    min-height: 3rem !important;
+}
+[data-testid="stHeader"]::before {
+    content: "📈  STOCKMANIA" !important;
+    color: #00d4aa !important;
+    font-weight: 800 !important;
+    font-size: 1.1rem !important;
+    letter-spacing: 0.05em !important;
+    padding-left: 1.5rem !important;
+    flex: 1 !important;
+    font-family: 'Inter', sans-serif !important;
+}
+[data-testid="stMain"] {
+    padding-top: 1rem !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -425,6 +453,15 @@ def cached_run_analysis(ticker: str) -> dict:
         technicals=technicals, risks=risks, opportunities=opportunities,
         decision=decision,
     )
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def cached_macro_context(ticker: str) -> dict:
+    try:
+        from fetch_macro_context import run as run_macro
+        return run_macro(ticker)
+    except Exception:
+        return {}
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -581,6 +618,125 @@ def render_header(ticker, overview, decision):
             f"</div>",
             unsafe_allow_html=True,
         )
+
+
+def render_extended_hours(ticker: str, current_price: float):
+    """Show pre/post market prices if available."""
+    try:
+        t = yf.Ticker(ticker)
+        fi = t.fast_info
+        pre  = getattr(fi, "pre_market_price",  None)
+        post = getattr(fi, "post_market_price", None)
+        if not pre and not post:
+            return
+        items = []
+        if pre:
+            chg = (pre - current_price) / current_price * 100 if current_price else 0
+            items.append(("Pre-market", f"${pre:,.2f}", f"{chg:+.2f}%"))
+        if post:
+            chg = (post - current_price) / current_price * 100 if current_price else 0
+            items.append(("Post-market", f"${post:,.2f}", f"{chg:+.2f}%"))
+        if items:
+            cols = st.columns(len(items) + 1)
+            for col, (label, val, delta) in zip(cols, items):
+                col.metric(label, val, delta)
+    except Exception:
+        pass
+
+
+def render_score_explanation():
+    with st.expander("ℹ️ ¿Cómo se calcula el score?", expanded=False):
+        st.markdown("""
+**Rango de score: -1.0 (muy bajista) a +1.0 (muy alcista)**
+
+| Módulo | Peso | Qué evalúa |
+|--------|------|-----------|
+| **Fundamentos** | 25% | P/E ratio, deuda/equity, crecimiento de ingresos, márgenes de beneficio |
+| **Noticias** | 20% | Sentimiento de noticias recientes via análisis NLP (VADER) |
+| **Técnico** | 30% | RSI, MACD, medias móviles (SMA20/50/200), Bollinger Bands, volumen |
+| **Riesgo** | 15% | Volatilidad histórica, beta de mercado, factores de riesgo identificados |
+| **Oportunidad** | 10% | Catalizadores próximos, tendencia del sector, señales de impulso |
+
+**¿Qué significa el score final?**
+- **+0.3 o más** → Comprar — múltiples señales alcistas alineadas
+- **+0.1 a +0.3** → Sesgo alcista — más positivo que negativo
+- **-0.1 a +0.1** → Neutral — señales mixtas, mejor esperar
+- **-0.3 a -0.1** → Sesgo bajista — más negativo que positivo
+- **-0.3 o menos** → Vender — múltiples señales bajistas alineadas
+
+**Sistema de aprendizaje adaptativo:** Los pesos de cada señal técnica individual se ajustan automáticamente en base al historial de precisión. Señales que históricamente aciertan más tienen mayor influencia.
+        """, unsafe_allow_html=False)
+
+
+def render_macro_context(macro: dict):
+    """Display macro environment and historical parallels."""
+    if not macro:
+        return
+    regime_colors = {
+        "recession_risk":  "#ef5350",
+        "bear_market":     "#ef5350",
+        "rate_tightening": "#f39c12",
+        "high_volatility": "#f39c12",
+        "moderate_stress": "#f0a500",
+        "normal":          "#00d4aa",
+    }
+    regime = macro.get("regime", "normal")
+    color  = regime_colors.get(regime, "#8892b0")
+    label  = macro.get("regime_label", "Normal")
+
+    st.markdown(
+        f"<div class='section-header'>🌍 Contexto Macro & Historia Financiera</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"<div style='display:inline-block; padding:4px 14px; border-radius:20px; "
+        f"background:{color}22; border:1px solid {color}; color:{color}; "
+        f"font-weight:700; margin-bottom:12px;'>Régimen actual: {label}</div>",
+        unsafe_allow_html=True,
+    )
+
+    # Macro indicators
+    indicators = macro.get("indicators", {})
+    if indicators:
+        cols = st.columns(4)
+        metric_map = [
+            ("VIX",         indicators.get("vix"),         "Índice de Miedo"),
+            ("Yield 10Y",   indicators.get("yield_10y"),   "% Bonos EEUU"),
+            ("Petróleo",    indicators.get("oil"),         "USD/barril"),
+            ("Oro",         indicators.get("gold"),        "USD/oz"),
+        ]
+        for col, (name, val, caption) in zip(cols, metric_map):
+            if val is not None:
+                col.metric(name, f"{val:.2f}", caption)
+
+    # Macro signals
+    signals = macro.get("macro_signals", [])
+    if signals:
+        with st.expander("📡 Señales macro detectadas", expanded=False):
+            for sig in signals:
+                st.markdown(f"- {sig}")
+
+    # Historical parallels
+    parallels = macro.get("historical_parallels", [])
+    if parallels:
+        with st.expander("📚 Paralelos históricos más similares", expanded=True):
+            for p in parallels:
+                st.markdown(
+                    f"**{p['event']}** ({p['period']}) — "
+                    f"S&P500: {p['sp500_impact']}% | "
+                    f"Recuperación: {p.get('recovery_years', '?')} años"
+                )
+                st.markdown(f"*{p['lesson']}*")
+                safe = ", ".join(p.get("sectors_safe", [])) or "N/A"
+                hurt = ", ".join(p.get("sectors_hurt", []))[:60] or "N/A"
+                st.caption(f"✅ Sectores seguros: {safe}  |  ⚠️ Sectores en riesgo: {hurt}")
+                st.divider()
+
+    # Macro score adjustment info
+    macro_score = macro.get("macro_score", 0)
+    if abs(macro_score) > 0.01:
+        direction = "penaliza" if macro_score < 0 else "mejora"
+        st.caption(f"El contexto macro {direction} el score final en {macro_score:+.3f}")
 
 
 def render_score_cards(data):
@@ -2304,6 +2460,7 @@ with tab2:
                 st.stop()
 
         render_header(ticker_input, data["overview"], data["decision"])
+        render_extended_hours(ticker_input, data["decision"].get("current_price", 0))
         st.divider()
 
         desc = data["overview"].get("description", "")
@@ -2318,6 +2475,7 @@ with tab2:
 
         st.divider()
         st.subheader("Scores por Módulo")
+        render_score_explanation()
         render_score_cards(data)
         st.divider()
 
@@ -2336,6 +2494,9 @@ with tab2:
 
         st.subheader("Veredicto Final")
         render_verdict(data["decision"])
+        st.divider()
+        macro_data = cached_macro_context(ticker_input)
+        render_macro_context(macro_data)
 
         key_events = data["decision"].get("key_events", [])
         if key_events:
