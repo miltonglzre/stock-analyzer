@@ -1230,7 +1230,7 @@ def render_daily_watchlist(picks: list, market_is_open: bool):
             "Sector":      p.get("sector", ""),
             "Rec":         p["recommendation"],
             "Score":       p.get("current_score", p["score"]),
-            "Confidence":  p.get("confidence_pct", 0),
+            "Confidence":  p.get("confidence_pct", 0),   # key kept for column_config mapping
             "Entry $":     p.get("entry_price", 0),
             "Now $":       p.get("current_price", 0),
             "P&L %":       p.get("pnl_pct", 0.0),
@@ -1622,7 +1622,7 @@ def build_fg_gauge(score: float, rating: str, color: str) -> go.Figure:
             "axis": {
                 "range": [0, 100],
                 "tickvals": [0, 25, 45, 55, 75, 100],
-                "ticktext": ["", "Fear", "", "", "Greed", ""],
+                "ticktext": ["", "Miedo", "", "", "Codicia", ""],
                 "tickfont": {"size": 10, "color": "#4a5580"},
                 "tickcolor": "#1a2040",
                 "tickwidth": 1,
@@ -2042,7 +2042,7 @@ def render_scanner_tab():
         # ── Daily Top 10 watchlist ─────────────────────────────────────────────
         generated_at = picks_data.get("generated_at", "")[:16].replace("T", " ")
         last_upd     = picks_data.get("last_updated", "")[:16].replace("T", " ")
-        date_label   = picks_data.get("date", "today")
+        date_label   = picks_data.get("date", "hoy")
         st.subheader(f"Watchlist Diario — {date_label}")
         st.caption(
             f"Generado a las {generated_at} · Actualizado {last_upd} · "
