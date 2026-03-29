@@ -63,14 +63,14 @@ def _check_password() -> bool:
     )
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        pw = st.text_input("Password", type="password", label_visibility="collapsed",
-                           placeholder="Enter password")
-        if st.button("Login", type="primary", use_container_width=True):
+        pw = st.text_input("Contraseña", type="password", label_visibility="collapsed",
+                           placeholder="Ingresa tu contraseña")
+        if st.button("Entrar", type="primary", use_container_width=True):
             if pw == required_pw:
                 st.session_state.authenticated = True
                 st.rerun()
             else:
-                st.error("Incorrect password")
+                st.error("Contraseña incorrecta")
     return False
 
 if not _check_password():
@@ -521,7 +521,7 @@ def build_chart(df: pd.DataFrame, technicals: dict) -> go.Figure:
         margin=dict(l=10, r=10, t=10, b=10),
         hovermode="x unified",
     )
-    fig.update_yaxes(title_text="Price (USD)", row=1, col=1,
+    fig.update_yaxes(title_text="Precio (USD)", row=1, col=1,
                      gridcolor="rgba(255,255,255,0.04)", tickprefix="$")
     fig.update_yaxes(title_text="RSI", row=2, col=1,
                      range=[0, 100], gridcolor="rgba(255,255,255,0.04)")
@@ -529,6 +529,11 @@ def build_chart(df: pd.DataFrame, technicals: dict) -> go.Figure:
 
     return fig
 
+
+# ── Translation maps ──────────────────────────────────────────────────────────
+_REC_ES   = {"Buy": "Comprar",  "Sell": "Vender",  "Wait": "Esperar"}
+_VERD_ES  = {"Bullish": "Alcista", "Bearish": "Bajista", "Neutral": "Neutral"}
+_LEVEL_ES = {"High": "Alto", "Moderate": "Moderado", "Low": "Bajo"}
 
 # ── Render helpers ─────────────────────────────────────────────────────────────
 
@@ -549,16 +554,16 @@ def render_header(ticker, overview, decision):
             f"**{overview.get('sector','N/A')}** › {overview.get('industry','N/A')} · "
             f"{overview.get('exchange','N/A')} · {overview.get('country','N/A')}"
         )
-    c2.metric("Price",      f"${price:,.2f}")
+    c2.metric("Precio",     f"${price:,.2f}")
     c3.metric("Score",      f"{score:+.3f}")
-    c4.metric("Confidence", f"{conf}%")
+    c4.metric("Confianza",  f"{conf}%")
     with c5:
         st.markdown(
             f"<div style='text-align:center; padding-top:4px;'>"
             f"<span style='color:{'#00d4aa' if rec=='Buy' else '#ef5350' if rec=='Sell' else '#f39c12'};"
-            f"font-size:1.6rem; font-weight:900;'>{rec}</span><br/>"
+            f"font-size:1.6rem; font-weight:900;'>{_REC_ES.get(rec, rec)}</span><br/>"
             f"<span style='color:{'#00d4aa' if verdict=='Bullish' else '#ef5350' if verdict=='Bearish' else '#f39c12'};"
-            f"font-size:0.85rem;'>{verdict}</span>"
+            f"font-size:0.85rem;'>{_VERD_ES.get(verdict, verdict)}</span>"
             f"</div>",
             unsafe_allow_html=True,
         )
@@ -566,12 +571,13 @@ def render_header(ticker, overview, decision):
 
 def render_score_cards(data):
     bd = data["decision"]["score_breakdown"]
+    _lt = data["technicals"]["trend"].get("long_term", "?")
     modules = [
-        ("Fundamentals", bd["fundamentals"]["adjusted"], data["fundamentals"]["rating"],     "25%"),
-        ("News",         bd["news"]["adjusted"],         data["news"]["sentiment"],           "20%"),
-        ("Technical",    bd["technicals"]["adjusted"],   data["technicals"]["trend"].get("long_term","?") + " Trend", "30%"),
-        ("Risk",         bd["risk"]["adjusted"],         data["risks"]["risk_level"],         "15%"),
-        ("Opportunity",  bd["opportunities"]["adjusted"],data["opportunities"]["opportunity_level"], "10%"),
+        ("Fundamentos",  bd["fundamentals"]["adjusted"], _LEVEL_ES.get(data["fundamentals"]["rating"], data["fundamentals"]["rating"]), "25%"),
+        ("Noticias",     bd["news"]["adjusted"],         _VERD_ES.get(data["news"]["sentiment"], data["news"]["sentiment"]), "20%"),
+        ("Técnico",      bd["technicals"]["adjusted"],   _VERD_ES.get(_lt, _lt) + " Tendencia", "30%"),
+        ("Riesgo",       bd["risk"]["adjusted"],         _LEVEL_ES.get(data["risks"]["risk_level"], data["risks"]["risk_level"]), "15%"),
+        ("Oportunidad",  bd["opportunities"]["adjusted"],_LEVEL_ES.get(data["opportunities"]["opportunity_level"], data["opportunities"]["opportunity_level"]), "10%"),
     ]
     cols = st.columns(5)
     for col, (name, score, label, weight) in zip(cols, modules):
@@ -591,35 +597,35 @@ def render_technicals_table(technicals):
     sig   = t.get("macd_signal", 0) or 0
 
     rows = [
-        ("RSI (14)",      f"{rsi:.1f}" if rsi else "N/A",
-                          "Oversold" if rsi and rsi < 30 else "Overbought" if rsi and rsi > 70 else "Neutral"),
-        ("MACD",          f"{macd:.4f}",   "Bullish" if macd > sig else "Bearish"),
-        ("MACD Signal",   f"{sig:.4f}",    ""),
-        ("SMA 20",        f"${t.get('sma20') or 'N/A'}", ""),
-        ("SMA 50",        f"${t.get('sma50') or 'N/A'}", ""),
-        ("SMA 200",       f"${t.get('sma200') or 'N/A'}", ""),
-        ("Bollinger High",f"${t.get('bb_upper') or 'N/A'}", ""),
-        ("Bollinger Low", f"${t.get('bb_lower') or 'N/A'}", ""),
-        ("Support",       f"${t.get('nearest_support') or 'N/A'}",    "Key Level"),
-        ("Resistance",    f"${t.get('nearest_resistance') or 'N/A'}", "Key Level"),
-        ("Vol Ratio",     f"{t.get('volume_ratio') or 'N/A'}x",       "vs 20-day avg"),
-        ("Trend Short",   trend.get("short_term", "N/A"),  ""),
-        ("Trend Long",    trend.get("long_term", "N/A"),   ""),
-        ("MA Cross",      trend.get("ma_cross", "N/A"),    ""),
-        ("Entry Zone",    f"${t.get('entry_zone_low','?'):.2f} – ${t.get('entry_zone_high','?'):.2f}", "Suggested entry"),
-        ("Stop Loss",     f"${t.get('stop_loss','?'):.2f}",   "Exit on loss"),
-        ("Target",        f"${t.get('target_price','?'):.2f}", "Take profit"),
+        ("RSI (14)",        f"{rsi:.1f}" if rsi else "N/A",
+                            "Sobrevendido" if rsi and rsi < 30 else "Sobrecomprado" if rsi and rsi > 70 else "Neutral"),
+        ("MACD",            f"{macd:.4f}",   "Alcista" if macd > sig else "Bajista"),
+        ("Señal MACD",      f"{sig:.4f}",    ""),
+        ("SMA 20",          f"${t.get('sma20') or 'N/A'}", ""),
+        ("SMA 50",          f"${t.get('sma50') or 'N/A'}", ""),
+        ("SMA 200",         f"${t.get('sma200') or 'N/A'}", ""),
+        ("Bollinger Alto",  f"${t.get('bb_upper') or 'N/A'}", ""),
+        ("Bollinger Bajo",  f"${t.get('bb_lower') or 'N/A'}", ""),
+        ("Soporte",         f"${t.get('nearest_support') or 'N/A'}",    "Nivel Clave"),
+        ("Resistencia",     f"${t.get('nearest_resistance') or 'N/A'}", "Nivel Clave"),
+        ("Ratio Volumen",   f"{t.get('volume_ratio') or 'N/A'}x",       "vs prom. 20 días"),
+        ("Tendencia Corto", trend.get("short_term", "N/A"),  ""),
+        ("Tendencia Largo", trend.get("long_term", "N/A"),   ""),
+        ("Cruce MA",        trend.get("ma_cross", "N/A"),    ""),
+        ("Zona Entrada",    f"${t.get('entry_zone_low','?'):.2f} – ${t.get('entry_zone_high','?'):.2f}", "Entrada sugerida"),
+        ("Stop Loss",       f"${t.get('stop_loss','?'):.2f}",   "Salida por pérdida"),
+        ("Objetivo",        f"${t.get('target_price','?'):.2f}", "Tomar ganancias"),
     ]
-    df = pd.DataFrame(rows, columns=["Indicator", "Value", "Signal"])
+    df = pd.DataFrame(rows, columns=["Indicador", "Valor", "Señal"])
     st.dataframe(
         df,
         hide_index=True,
         use_container_width=True,
         height=530,
         column_config={
-            "Indicator": st.column_config.TextColumn("Indicator", help="Name of the technical indicator or price level"),
-            "Value":     st.column_config.TextColumn("Value",     help="Current calculated value for this indicator"),
-            "Signal":    st.column_config.TextColumn("Signal",    help="What this indicator is currently saying about price direction"),
+            "Indicador": st.column_config.TextColumn("Indicador", help="Nombre del indicador técnico o nivel de precio"),
+            "Valor":     st.column_config.TextColumn("Valor",     help="Valor calculado actual para este indicador"),
+            "Señal":     st.column_config.TextColumn("Señal",     help="Lo que este indicador dice sobre la dirección del precio"),
         },
     )
 
@@ -639,24 +645,24 @@ def render_news(news):
     st.markdown(
         f"<span style='color:{color}; font-weight:700; font-size:1.1rem;'>"
         f"{sentiment}</span> &nbsp; Score: <code>{sent_score:+.3f}</code> &nbsp;|&nbsp; "
-        f"{total} articles analyzed",
+        f"{total} artículos analizados",
         unsafe_allow_html=True,
     )
 
     if key_events:
-        st.markdown("**Key Events:** " + "  ".join(f"`{e}`" for e in key_events))
+        st.markdown("**Eventos Clave:** " + "  ".join(f"`{e}`" for e in key_events))
 
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("**Positive Headlines**")
+        st.markdown("**Titulares Positivos**")
         for h in positives:
             st.markdown(f"<span style='color:#00d4aa'>+</span> {h}", unsafe_allow_html=True)
     with col2:
-        st.markdown("**Negative Headlines**")
+        st.markdown("**Titulares Negativos**")
         for h in negatives:
             st.markdown(f"<span style='color:#ef5350'>-</span> {h}", unsafe_allow_html=True)
 
-    with st.expander(f"All {total} articles"):
+    with st.expander(f"Todos los {total} artículos"):
         for a in articles[:20]:
             score = a.get("vader_score", 0)
             col = "#00d4aa" if score > 0.05 else "#ef5350" if score < -0.05 else "#aaa"
@@ -674,14 +680,14 @@ def render_risk_opportunity(risks, opportunities):
     with col1:
         level = risks.get("risk_level", "?")
         lcol  = "#ef5350" if level == "High" else "#f39c12" if level == "Moderate" else "#00d4aa"
-        st.markdown(f"**Risk Level:** <span style='color:{lcol}'>{level}</span>",
+        st.markdown(f"**Nivel de Riesgo:** <span style='color:{lcol}'>{_LEVEL_ES.get(level, level)}</span>",
                     unsafe_allow_html=True)
         for r in risks.get("reasoning", []):
             st.markdown(f"<span style='color:#ef5350'>⚠</span> {r}", unsafe_allow_html=True)
     with col2:
         level = opportunities.get("opportunity_level", "?")
         lcol  = "#00d4aa" if level == "High" else "#f39c12" if level == "Moderate" else "#aaa"
-        st.markdown(f"**Opportunity Level:** <span style='color:{lcol}'>{level}</span>",
+        st.markdown(f"**Nivel de Oportunidad:** <span style='color:{lcol}'>{_LEVEL_ES.get(level, level)}</span>",
                     unsafe_allow_html=True)
         for o in opportunities.get("reasoning", []):
             st.markdown(f"<span style='color:#00d4aa'>+</span> {o}", unsafe_allow_html=True)
@@ -704,9 +710,9 @@ def render_verdict(decision):
 
     st.markdown(
         f"<div class='{REC_CSS.get(rec, '')}' style='margin: 12px 0;'>"
-        f"<div class='big-rec' style='color:{color}'>{rec}</div>"
-        f"<div style='color:#ccc; margin-top:4px;'>{verdict} &nbsp;|&nbsp; "
-        f"Score: {score:+.3f} &nbsp;|&nbsp; Confidence: {conf}%</div>"
+        f"<div class='big-rec' style='color:{color}'>{_REC_ES.get(rec, rec)}</div>"
+        f"<div style='color:#ccc; margin-top:4px;'>{_VERD_ES.get(verdict, verdict)} &nbsp;|&nbsp; "
+        f"Score: {score:+.3f} &nbsp;|&nbsp; Confianza: {conf}%</div>"
         f"<div style='color:#888; font-size:0.9rem; margin-top:8px;'>{timing}</div>"
         f"</div>",
         unsafe_allow_html=True,
@@ -722,28 +728,28 @@ def render_verdict(decision):
     sl_str = f"${sl:.2f}" if sl else "N/A"
     tp_str = f"${tp:.2f}" if tp else "N/A"
 
-    c1.metric("Entry Zone",   ez_str)
-    c2.metric("Stop Loss",    sl_str)
-    c3.metric("Target Price", tp_str)
+    c1.metric("Zona de Entrada", ez_str)
+    c2.metric("Stop Loss",       sl_str)
+    c3.metric("Precio Objetivo", tp_str)
 
 
 # ── Tab 2: My Trades ───────────────────────────────────────────────────────────
 
 def render_trades_tab():
-    st.header("My Trades")
+    st.header("Mis Operaciones")
     st.caption(
-        "Record trades via CLI: `python tools/record_trade.py TICKER PRICE Buy`  "
-        "and close via: `python tools/record_outcome.py TRADE_ID EXIT_PRICE`"
+        "Registra operaciones vía CLI: `python tools/record_trade.py TICKER PRICE Buy`  "
+        "y cierra con: `python tools/record_outcome.py TRADE_ID EXIT_PRICE`"
     )
     st.info(
-        "SQLite is ephemeral on Streamlit Community Cloud — trade history resets "
-        "on each new deployment. For persistence, run the app locally.",
+        "SQLite es efímero en Streamlit Community Cloud — el historial de operaciones se reinicia "
+        "con cada nuevo despliegue. Para persistencia, ejecuta la app localmente.",
         icon="ℹ",
     )
 
     db = db_path()
     if not db.exists():
-        st.warning("Database not initialized yet. Analyze a stock first.")
+        st.warning("Base de datos no inicializada. Analiza una acción primero.")
         return
 
     conn = sqlite3.connect(db)
@@ -758,7 +764,7 @@ def render_trades_tab():
         conn.close()
 
     if trades_df.empty:
-        st.info("No trades recorded yet.")
+        st.info("Aún no hay operaciones registradas.")
         return
 
     closed = trades_df[trades_df["outcome"].notna()]
@@ -768,11 +774,11 @@ def render_trades_tab():
     avg_pnl= closed["pnl_pct"].mean() if not closed.empty else 0
 
     m1, m2, m3, m4, m5 = st.columns(5)
-    m1.metric("Total Trades",  len(trades_df))
-    m2.metric("Closed",        len(closed))
-    m3.metric("Wins",          int(wins))
-    m4.metric("Win Rate",      f"{wr:.1f}%")
-    m5.metric("Avg P&L",       f"{avg_pnl:.2f}%")
+    m1.metric("Total Operaciones", len(trades_df))
+    m2.metric("Cerradas",          len(closed))
+    m3.metric("Victorias",         int(wins))
+    m4.metric("% Victorias",       f"{wr:.1f}%")
+    m5.metric("P&L Promedio",      f"{avg_pnl:.2f}%")
 
     if not closed.empty:
         # P&L bar chart
@@ -800,17 +806,17 @@ def render_trades_tab():
         hide_index=True,
         use_container_width=True,
         column_config={
-            "id":            st.column_config.NumberColumn("ID",          help="Trade ID — use this number with record_outcome.py to close the trade"),
-            "ticker":        st.column_config.TextColumn(  "Ticker",      help="Stock symbol"),
-            "entry_date":    st.column_config.TextColumn(  "Entry Date",  help="Date and time you entered the position"),
-            "entry_price":   st.column_config.NumberColumn("Entry $",     format="$%.2f", help="Price at which you bought/shorted"),
-            "exit_date":     st.column_config.TextColumn(  "Exit Date",   help="Date the position was closed (blank if still open)"),
-            "exit_price":    st.column_config.NumberColumn("Exit $",      format="$%.2f", help="Price at which you closed the position"),
-            "pnl_pct":       st.column_config.NumberColumn("P&L %",       format="%.2f%%",help="Percentage gain or loss: (exit - entry) / entry × 100"),
-            "outcome":       st.column_config.TextColumn(  "Outcome",     help="win = P&L > +5% | loss = P&L < -5% | neutral = in between"),
-            "recommendation":st.column_config.TextColumn(  "Algo Rec",    help="What the algorithm recommended when you entered"),
-            "confidence_pct":st.column_config.NumberColumn("Confidence",  format="%d%%",  help="Algorithm's confidence at the time of the recommendation"),
-            "verdict":       st.column_config.TextColumn(  "Verdict",     help="Bullish / Bearish / Neutral — the overall market bias when you entered"),
+            "id":            st.column_config.NumberColumn("ID",          help="ID de operación — usa este número con record_outcome.py para cerrarla"),
+            "ticker":        st.column_config.TextColumn(  "Ticker",      help="Símbolo de la acción"),
+            "entry_date":    st.column_config.TextColumn(  "Fecha Entrada", help="Fecha y hora en que entraste a la posición"),
+            "entry_price":   st.column_config.NumberColumn("Entrada $",   format="$%.2f", help="Precio al que compraste/vendiste corto"),
+            "exit_date":     st.column_config.TextColumn(  "Fecha Salida", help="Fecha en que se cerró la posición (vacío si sigue abierta)"),
+            "exit_price":    st.column_config.NumberColumn("Salida $",    format="$%.2f", help="Precio al que cerraste la posición"),
+            "pnl_pct":       st.column_config.NumberColumn("P&L %",       format="%.2f%%",help="Ganancia o pérdida porcentual: (salida - entrada) / entrada × 100"),
+            "outcome":       st.column_config.TextColumn(  "Resultado",   help="win = P&L > +5% | loss = P&L < -5% | neutral = intermedio"),
+            "recommendation":st.column_config.TextColumn(  "Rec Algo",    help="Lo que el algoritmo recomendó cuando entraste"),
+            "confidence_pct":st.column_config.NumberColumn("Confianza",   format="%d%%",  help="Confianza del algoritmo al momento de la recomendación"),
+            "verdict":       st.column_config.TextColumn(  "Veredicto",   help="Alcista / Bajista / Neutral — sesgo general del mercado al entrar"),
         }
     )
 
@@ -818,17 +824,17 @@ def render_trades_tab():
 # ── Tab 3: Learning System ─────────────────────────────────────────────────────
 
 def render_learning_tab():
-    st.header("Learning System — Signal Weights")
+    st.header("Sistema de Aprendizaje — Pesos de Señales")
     st.caption(
-        "After closing trades via `record_outcome.py`, run `python tools/analyze_errors.py` "
-        "and `python tools/adjust_weights.py` to update weights."
+        "Tras cerrar operaciones con `record_outcome.py`, ejecuta `python tools/analyze_errors.py` "
+        "y `python tools/adjust_weights.py` para actualizar los pesos."
     )
 
     weights = load_weights()
     weights_clean = {k: v for k, v in weights.items() if k != "last_updated"}
     last_updated  = weights.get("last_updated", "Never")
 
-    st.caption(f"Last updated: {last_updated}")
+    st.caption(f"Última actualización: {last_updated}")
 
     weights_df = pd.DataFrame(
         [(k, v) for k, v in weights_clean.items()],
@@ -838,16 +844,16 @@ def render_learning_tab():
     col1, col2 = st.columns([1, 2])
 
     with col1:
-        st.subheader("Current Weights")
+        st.subheader("Pesos Actuales")
         st.dataframe(
             weights_df,
             hide_index=True,
             use_container_width=True,
             column_config={
-                "Signal": st.column_config.TextColumn("Signal", help="Technical signal tracked by the learning system (RSI, MA crossovers, MACD, etc.)"),
+                "Signal": st.column_config.TextColumn("Señal", help="Señal técnica rastreada por el sistema de aprendizaje (RSI, cruces MA, MACD, etc.)"),
                 "Weight": st.column_config.ProgressColumn(
-                    "Weight", min_value=0.2, max_value=2.0, format="%.3f",
-                    help="Learning weight: 1.0 = default, >1.0 = this signal has been accurate, <1.0 = this signal has been unreliable. Range: 0.2 – 2.0"
+                    "Peso", min_value=0.2, max_value=2.0, format="%.3f",
+                    help="Peso de aprendizaje: 1.0 = predeterminado, >1.0 = señal precisa, <1.0 = señal poco confiable. Rango: 0.2 – 2.0"
                 ),
             }
         )
@@ -855,7 +861,7 @@ def render_learning_tab():
     with col2:
         db = db_path()
         if not db.exists():
-            st.info("No database yet. Run an analysis first.")
+            st.info("Sin base de datos. Analiza una acción primero.")
             return
 
         conn = sqlite3.connect(db)
@@ -870,15 +876,15 @@ def render_learning_tab():
 
         if hist_df.empty:
             st.info(
-                "No weight history yet. Close some trades with `record_outcome.py` "
-                "then run `adjust_weights.py`."
+                "Sin historial de pesos. Cierra operaciones con `record_outcome.py` "
+                "y luego ejecuta `adjust_weights.py`."
             )
             return
 
         hist_df["recorded_at"] = pd.to_datetime(hist_df["recorded_at"])
 
         # Weight evolution chart
-        st.subheader("Weight History")
+        st.subheader("Historial de Pesos")
         fig = go.Figure()
         for sig in hist_df["signal_type"].unique():
             s = hist_df[hist_df["signal_type"] == sig]
@@ -887,12 +893,12 @@ def render_learning_tab():
                 name=sig, mode="lines+markers", marker=dict(size=6),
             ))
         fig.add_hline(y=1.0, line_dash="dash", line_color="rgba(255,255,255,0.3)",
-                      annotation_text="Default (1.0)", annotation_font_color="#888")
+                      annotation_text="Predeterminado (1.0)", annotation_font_color="#888")
         fig.update_layout(
             template="plotly_dark", height=280,
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(14,17,23,0.95)",
-            yaxis_title="Weight", xaxis_title="Date",
+            yaxis_title="Peso", xaxis_title="Fecha",
             hovermode="x unified",
             legend=dict(orientation="h", font=dict(size=10)),
             margin=dict(l=10, r=10, t=10, b=10),
@@ -900,7 +906,7 @@ def render_learning_tab():
         st.plotly_chart(fig, width='stretch')
 
         # Signal accuracy bar chart
-        st.subheader("Signal Accuracy (Latest)")
+        st.subheader("Precisión de Señales (Más reciente)")
         latest = (
             hist_df.sort_values("recorded_at")
             .groupby("signal_type")
@@ -918,19 +924,19 @@ def render_learning_tab():
             ],
         ))
         fig2.add_hline(y=50, line_dash="dash", line_color="rgba(255,255,0,0.4)",
-                       annotation_text="50% baseline")
+                       annotation_text="50% base")
         fig2.update_layout(
             template="plotly_dark", height=280,
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(14,17,23,0.95)",
-            yaxis_title="Accuracy %", yaxis_range=[0, 110],
+            yaxis_title="Precisión %", yaxis_range=[0, 110],
             xaxis_tickangle=-35,
             showlegend=False,
             margin=dict(l=10, r=10, t=10, b=80),
         )
         st.plotly_chart(fig2, width='stretch')
 
-        with st.expander("Raw accuracy table"):
+        with st.expander("Tabla de precisión"):
             st.dataframe(latest[["signal_type","accuracy_pct","sample_size","weight"]],
                          hide_index=True, use_container_width=True)
 
@@ -942,7 +948,7 @@ def render_learning_tab():
 # ── Main layout ────────────────────────────────────────────────────────────────
 
 tab0, tab1, tab2, tab3, tab4 = st.tabs(
-    ["🏠 Home", "🔍 Scanner", "📊 Análisis", "💼 Trades", "🧠 Learning"]
+    ["🏠 Inicio", "🔍 Escáner", "📊 Análisis", "💼 Operaciones", "🧠 Aprendizaje"]
 )
 
 # ── Tab 1: Market Scanner ─────────────────────────────────────────────────────
@@ -997,16 +1003,16 @@ LOSS_THRESHOLD_DISPLAY = -3.0
 
 
 _SIGNAL_REASONS = {
-    "rsi_oversold":         "RSI below 30 — stock is oversold and historically bounces from this zone",
-    "rsi_overbought":       "RSI above 70 — strong momentum, but watch for exhaustion",
-    "golden_cross":         "SMA 20 crossed above SMA 50 — classic bullish trend change signal",
-    "death_cross":          "SMA 20 crossed below SMA 50 — bearish trend signal",
-    "above_both_mas":       "Price is above both SMA 20 and SMA 50 — uptrend confirmed",
-    "below_both_mas":       "Price is below both moving averages — downtrend in place",
-    "strong_momentum_up":   "5-day momentum is strongly positive — buyers are in control",
-    "strong_momentum_down": "5-day momentum is strongly negative — sellers dominating",
-    "volume_confirms_up":   "Price rise confirmed by above-average volume — institutional accumulation likely",
-    "volume_confirms_down": "Price drop confirmed by above-average volume — distribution / selling pressure",
+    "rsi_oversold":         "RSI por debajo de 30 — acción sobrevendida, históricamente rebota desde esta zona",
+    "rsi_overbought":       "RSI por encima de 70 — momentum fuerte, pero vigilar agotamiento",
+    "golden_cross":         "SMA 20 cruzó por encima de SMA 50 — señal clásica de cambio alcista de tendencia",
+    "death_cross":          "SMA 20 cruzó por debajo de SMA 50 — señal bajista de tendencia",
+    "above_both_mas":       "Precio por encima de SMA 20 y SMA 50 — tendencia alcista confirmada",
+    "below_both_mas":       "Precio por debajo de ambas medias móviles — tendencia bajista en curso",
+    "strong_momentum_up":   "Momentum de 5 días fuertemente positivo — compradores en control",
+    "strong_momentum_down": "Momentum de 5 días fuertemente negativo — vendedores dominando",
+    "volume_confirms_up":   "Subida de precio confirmada por volumen superior al promedio — posible acumulación institucional",
+    "volume_confirms_down": "Caída de precio confirmada por volumen superior al promedio — distribución / presión vendedora",
 }
 
 
@@ -1028,15 +1034,15 @@ def _render_buy_reason(r: dict):
 
     # ── Score & Confidence bar ────────────────────────────────────────────────
     col_s, col_c, col_p = st.columns(3)
-    col_s.metric("Algo Score",  f"{score:+.3f}", help="Combined signal score — closer to +1.0 = stronger buy")
-    col_c.metric("Confidence",  f"{conf}%",      help="How confident the algo is in this call")
-    col_p.metric("Price",       f"${price:.2f}", delta=f"{chg1d:+.1f}% today")
+    col_s.metric("Score Algo",  f"{score:+.3f}", help="Score combinado — más cerca de +1.0 = señal de compra más fuerte")
+    col_c.metric("Confianza",   f"{conf}%",      help="Qué tan confiado está el algo en esta señal")
+    col_p.metric("Precio",      f"${price:.2f}", delta=f"{chg1d:+.1f}% hoy")
 
     st.divider()
 
     # ── Why it triggered ─────────────────────────────────────────────────────
     if signals:
-        st.markdown("**Signals that fired:**")
+        st.markdown("**Señales activadas:**")
         for sig_key in signals:
             reason = _SIGNAL_REASONS.get(sig_key, sig_key.replace("_", " ").title())
             bullet_color = color
@@ -1047,13 +1053,13 @@ def _render_buy_reason(r: dict):
                 unsafe_allow_html=True,
             )
     else:
-        st.caption("No specific signal details available.")
+        st.caption("Sin detalles de señales disponibles.")
 
     st.divider()
 
     # ── Technical context ─────────────────────────────────────────────────────
     col_r, col_v, col_m = st.columns(3)
-    rsi_label = "Oversold ← buy zone" if rsi < 30 else "Overbought" if rsi > 70 else "Neutral"
+    rsi_label = "Sobrevendido ← zona compra" if rsi < 30 else "Sobrecomprado" if rsi > 70 else "Neutral"
     rsi_color  = "#00d4aa" if rsi < 30 else "#ef5350" if rsi > 70 else "#f39c12"
     col_r.markdown(
         f"**RSI (14):** <span style='color:{rsi_color};font-weight:700;'>{rsi:.0f}</span> "
@@ -1063,15 +1069,15 @@ def _render_buy_reason(r: dict):
 
     vr_color = "#00d4aa" if vr >= 2 else "#f39c12" if vr >= 1.2 else "#888"
     col_v.markdown(
-        f"**Volume:** <span style='color:{vr_color};font-weight:700;'>{vr:.1f}x</span> "
-        f"<span style='color:#888;font-size:0.8rem;'>vs 20-day avg</span>",
+        f"**Volumen:** <span style='color:{vr_color};font-weight:700;'>{vr:.1f}x</span> "
+        f"<span style='color:#888;font-size:0.8rem;'>vs prom. 20 días</span>",
         unsafe_allow_html=True,
     )
 
     chg5_color = "#00d4aa" if chg5d > 0 else "#ef5350"
     col_m.markdown(
-        f"**5-day move:** <span style='color:{chg5_color};font-weight:700;'>{chg5d:+.1f}%</span> "
-        f"<span style='color:#888;font-size:0.8rem;'>weekly momentum</span>",
+        f"**Movimiento 5 días:** <span style='color:{chg5_color};font-weight:700;'>{chg5d:+.1f}%</span> "
+        f"<span style='color:#888;font-size:0.8rem;'>momentum semanal</span>",
         unsafe_allow_html=True,
     )
 
@@ -1079,7 +1085,7 @@ def _render_buy_reason(r: dict):
     if manip:
         med_high = [f for f in manip if f.get("severity") in ("high", "medium")]
         if med_high:
-            st.markdown("**⚠ Caution flags:**")
+            st.markdown("**⚠ Señales de precaución:**")
             for f in med_high:
                 sev_col = "#ef5350" if f["severity"] == "high" else "#f39c12"
                 st.markdown(
@@ -1087,15 +1093,15 @@ def _render_buy_reason(r: dict):
                     unsafe_allow_html=True,
                 )
 
-    st.caption(f"Sector: {sector} · Data via Yahoo Finance")
+    st.caption(f"Sector: {sector} · Datos vía Yahoo Finance")
 
 
 def _status_badge(status: str) -> str:
     cfg = {
-        "active":     ("#f39c12", "ACTIVE"),
-        "target_hit": ("#00d4aa", "TARGET HIT"),
-        "stop_hit":   ("#ef5350", "STOP HIT"),
-        "closed":     ("#888",    "CLOSED"),
+        "active":     ("#f39c12", "ACTIVO"),
+        "target_hit": ("#00d4aa", "OBJETIVO ALCANZADO"),
+        "stop_hit":   ("#ef5350", "STOP ACTIVADO"),
+        "closed":     ("#888",    "CERRADO"),
     }.get(status, ("#888", status.upper()))
     return (
         f"<span style='background:{cfg[0]}22;border:1px solid {cfg[0]};"
@@ -1107,7 +1113,7 @@ def _status_badge(status: str) -> str:
 def render_conviction_picks(picks: list, market_is_open: bool, earnings_map: dict = {}):
     """Render the Top 5 High-Conviction section — large glassmorphism cards."""
     st.markdown(
-        "<div class='section-header'>★ Top 5 Conviction Picks</div>",
+        "<div class='section-header'>★ Top 5 Picks de Alta Convicción</div>",
         unsafe_allow_html=True,
     )
     st.caption("Score ≥ 0.40 · Confianza ≥ 62% · Múltiples señales · Sin flags de manipulación")
@@ -1207,13 +1213,13 @@ def render_daily_watchlist(picks: list, market_is_open: bool):
     losses_today = sum(1 for p in closed if p.get("outcome") == "loss")
 
     col_t, col_w, col_l = st.columns(3)
-    col_t.metric("Tracking",      f"{len(active)} active")
-    col_w.metric("Wins today",    f"{wins_today}",   delta=f"+{wins_today}" if wins_today else None)
-    col_l.metric("Stops hit",     f"{losses_today}", delta=f"-{losses_today}" if losses_today else None,
+    col_t.metric("Seguimiento",    f"{len(active)} activos")
+    col_w.metric("Victorias hoy", f"{wins_today}",   delta=f"+{wins_today}" if wins_today else None)
+    col_l.metric("Stops activados",f"{losses_today}", delta=f"-{losses_today}" if losses_today else None,
                  delta_color="inverse")
 
     if not picks:
-        st.info("Daily watchlist is empty. Run a scan first.")
+        st.info("Watchlist vacío. Ejecuta un scan primero.")
         return
 
     # Build display rows
@@ -1240,18 +1246,18 @@ def render_daily_watchlist(picks: list, market_is_open: bool):
         hide_index=True,
         use_container_width=True,
         column_config={
-            "Ticker":     st.column_config.TextColumn(  "Ticker",   help="Stock ticker symbol"),
-            "Sector":     st.column_config.TextColumn(  "Sector",   help="Market sector"),
-            "Rec":        st.column_config.TextColumn(  "Rec",      help="Buy or Sell recommendation for this pick"),
-            "Score":      st.column_config.NumberColumn("Score",    format="%.3f",   help="Current combined score: +1.0 = max bullish, -1.0 = max bearish"),
-            "Confidence": st.column_config.NumberColumn("Conf %",   format="%d%%",   help="Algorithm's confidence in the recommendation (0-100%)"),
-            "Entry $":    st.column_config.NumberColumn("Entry $",  format="$%.2f",  help="Price when this stock was added to the watchlist today"),
-            "Now $":      st.column_config.NumberColumn("Now $",    format="$%.2f",  help="Latest market price"),
-            "P&L %":      st.column_config.NumberColumn("P&L %",   format="%+.2f%%",help="Unrealized gain/loss since this pick was added. Target: +5% | Stop: -3%"),
-            "RSI":        st.column_config.NumberColumn("RSI",      format="%.0f",   help="Relative Strength Index: <30 oversold, >70 overbought"),
-            "Vol":        st.column_config.NumberColumn("Vol x",    format="%.1fx",  help="Volume ratio vs 20-day average"),
-            "Status":     st.column_config.TextColumn(  "Status",   help="active = being tracked | target_hit = reached +5% | stop_hit = dropped -3%"),
-            "Signals":    st.column_config.TextColumn(  "Signals",  help="Technical signals that triggered this pick (RSI, MA cross, momentum, volume)"),
+            "Ticker":     st.column_config.TextColumn(  "Ticker",   help="Símbolo de la acción"),
+            "Sector":     st.column_config.TextColumn(  "Sector",   help="Sector del mercado"),
+            "Rec":        st.column_config.TextColumn(  "Rec",      help="Recomendación de compra o venta para este pick"),
+            "Score":      st.column_config.NumberColumn("Score",    format="%.3f",   help="Score combinado: +1.0 = máximo alcista, -1.0 = máximo bajista"),
+            "Confidence": st.column_config.NumberColumn("Conf %",   format="%d%%",   help="Confianza del algoritmo en la recomendación (0-100%)"),
+            "Entry $":    st.column_config.NumberColumn("Entrada $",format="$%.2f",  help="Precio cuando esta acción fue agregada al watchlist hoy"),
+            "Now $":      st.column_config.NumberColumn("Actual $", format="$%.2f",  help="Precio de mercado más reciente"),
+            "P&L %":      st.column_config.NumberColumn("P&L %",   format="%+.2f%%",help="Ganancia/pérdida no realizada desde que se agregó el pick. Objetivo: +5% | Stop: -3%"),
+            "RSI":        st.column_config.NumberColumn("RSI",      format="%.0f",   help="Índice de Fuerza Relativa: <30 sobrevendido, >70 sobrecomprado"),
+            "Vol":        st.column_config.NumberColumn("Vol x",    format="%.1fx",  help="Ratio de volumen vs promedio 20 días"),
+            "Status":     st.column_config.TextColumn(  "Estado",   help="active = en seguimiento | target_hit = alcanzó +5% | stop_hit = bajó -3%"),
+            "Signals":    st.column_config.TextColumn(  "Señales",  help="Señales técnicas que activaron este pick (RSI, cruce MA, momentum, volumen)"),
         },
     )
 
@@ -1360,7 +1366,7 @@ def _build_projection_chart(ticker: str, hist: pd.DataFrame, pick: dict) -> go.F
         fill="toself",
         fillcolor="rgba(147,112,219,0.12)",
         line=dict(color="rgba(0,0,0,0)"),
-        name="Projection range",
+        name="Rango proyectado",
         showlegend=True,
         hoverinfo="skip",
     ), row=1, col=1)
@@ -1368,7 +1374,7 @@ def _build_projection_chart(ticker: str, hist: pd.DataFrame, pick: dict) -> go.F
     # Projection center line
     fig.add_trace(go.Scatter(
         x=proj_dates, y=proj_center,
-        name="Projected path",
+        name="Trayectoria proyectada",
         line=dict(color="#9370db", width=2, dash="dot"),
         mode="lines",
     ), row=1, col=1)
@@ -1418,8 +1424,8 @@ def _build_projection_chart(ticker: str, hist: pd.DataFrame, pick: dict) -> go.F
     score = pick.get("score", 0)
     fig.update_layout(
         title=dict(
-            text=(f"<b>{ticker}</b> — {rec} &nbsp;|&nbsp; Score {score:+.3f} &nbsp;|&nbsp; "
-                  f"Confidence {conf}%  &nbsp;"
+            text=(f"<b>{ticker}</b> — {_REC_ES.get(rec, rec)} &nbsp;|&nbsp; Score {score:+.3f} &nbsp;|&nbsp; "
+                  f"Confianza {conf}%  &nbsp;"
                   f"<span style='color:{color_main};'>{'▲' if rec=='Buy' else '▼'}</span>"),
             font=dict(size=15, color="#e0e0e0"),
             x=0, pad=dict(l=0),
@@ -1434,7 +1440,7 @@ def _build_projection_chart(ticker: str, hist: pd.DataFrame, pick: dict) -> go.F
         margin=dict(l=10, r=120, t=48, b=10),
         hovermode="x unified",
     )
-    fig.update_yaxes(title_text="Price (USD)", row=1, col=1,
+    fig.update_yaxes(title_text="Precio (USD)", row=1, col=1,
                      gridcolor="rgba(255,255,255,0.04)", tickprefix="$", tickfont=dict(size=11))
     fig.update_yaxes(title_text="RSI", row=2, col=1,
                      range=[0, 100], gridcolor="rgba(255,255,255,0.04)", tickfont=dict(size=11))
@@ -1451,19 +1457,19 @@ def render_projections_section(conviction_picks: list):
     if not conviction_picks:
         return
 
-    st.markdown("<div class='section-header'>📈 Price Projections — Top Conviction Picks</div>",
+    st.markdown("<div class='section-header'>📈 Proyecciones de Precio — Top Picks de Convicción</div>",
                 unsafe_allow_html=True)
     st.caption(
-        "Past 45 days of actual price data + 15-day forward projection based on recent momentum and volatility. "
-        "The purple cone shows the expected price range. "
-        "Green/red zones show the target (+5%) and stop (-3%) levels."
+        "Últimos 45 días de datos reales + proyección a 15 días basada en momentum y volatilidad reciente. "
+        "El cono morado muestra el rango de precio esperado. "
+        "Las zonas verde/roja indican el objetivo (+5%) y el stop (-3%)."
     )
 
     tickers = tuple(p["ticker"] for p in conviction_picks[:3])
     hist_map = _fetch_projection_data(tickers)
 
     if not hist_map:
-        st.warning("Could not load price data for projections.")
+        st.warning("No se pudieron cargar datos de precio para las proyecciones.")
         return
 
     # One chart per tab (or stacked if only 1-2)
@@ -1483,10 +1489,10 @@ def render_projections_section(conviction_picks: list):
                 fig = _build_projection_chart(t, hist_map[t], p)
                 st.plotly_chart(fig, width='stretch')
                 c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Entry",      f"${p.get('entry_price',0):.2f}")
-                c2.metric("Target +5%", f"${p.get('entry_price',0)*1.05:.2f}")
-                c3.metric("Stop -3%",   f"${p.get('entry_price',0)*0.97:.2f}")
-                c4.metric("Score",      f"{p.get('score',0):+.3f}")
+                c1.metric("Entrada",        f"${p.get('entry_price',0):.2f}")
+                c2.metric("Objetivo +5%",  f"${p.get('entry_price',0)*1.05:.2f}")
+                c3.metric("Stop -3%",      f"${p.get('entry_price',0)*0.97:.2f}")
+                c4.metric("Score",         f"{p.get('score',0):+.3f}")
 
 
 def _explosive_potential(r: dict) -> int:
@@ -1552,12 +1558,12 @@ def render_explosive_movers(scan_data: dict):
 
     st.markdown(
         "<div class='section-header' style='background:linear-gradient(90deg,#3d100018,transparent);"
-        "border-left-color:#ef5350;'>⚡ Explosive Move Candidates</div>",
+        "border-left-color:#ef5350;'>⚡ Candidatos a Movimiento Explosivo</div>",
         unsafe_allow_html=True,
     )
     st.caption(
-        "Stocks showing elevated volume + extreme RSI or strong intraday momentum — "
-        "high probability of a large single-day move. Not a guarantee; use with caution."
+        "Acciones con volumen elevado + RSI extremo o momentum intradiario fuerte — "
+        "alta probabilidad de un movimiento grande en el día. No es garantía; usar con precaución."
     )
 
     rows = []
@@ -1585,19 +1591,19 @@ def render_explosive_movers(scan_data: dict):
         hide_index=True,
         use_container_width=True,
         column_config={
-            "Ticker":   st.column_config.TextColumn(  "Ticker",    help="Stock symbol"),
+            "Ticker":   st.column_config.TextColumn(  "Ticker",    help="Símbolo de la acción"),
             "Sector":   st.column_config.TextColumn(  "Sector"),
-            "Rec":      st.column_config.TextColumn(  "Rec",       help="Buy / Sell direction the algo favors"),
-            "Price":    st.column_config.NumberColumn("Price",     format="$%.2f"),
-            "1d %":     st.column_config.NumberColumn("1d %",      format="%+.1f%%", help="Price change today"),
-            "Vol x":    st.column_config.NumberColumn("Vol x",     format="%.1fx",   help="Volume vs 20-day average — >2x means something is happening"),
-            "RSI":      st.column_config.NumberColumn("RSI",       format="%.0f",    help="<30 oversold / >70 overbought"),
-            "Score":    st.column_config.NumberColumn("Score",     format="%+.3f",   help="Combined algo score"),
+            "Rec":      st.column_config.TextColumn(  "Rec",       help="Dirección Buy / Sell que favorece el algo"),
+            "Price":    st.column_config.NumberColumn("Precio",    format="$%.2f"),
+            "1d %":     st.column_config.NumberColumn("1d %",      format="%+.1f%%", help="Cambio de precio hoy"),
+            "Vol x":    st.column_config.NumberColumn("Vol x",     format="%.1fx",   help="Volumen vs promedio 20 días — >2x indica actividad inusual"),
+            "RSI":      st.column_config.NumberColumn("RSI",       format="%.0f",    help="<30 sobrevendido / >70 sobrecomprado"),
+            "Score":    st.column_config.NumberColumn("Score",     format="%+.3f",   help="Score combinado del algo"),
             "Potential":st.column_config.ProgressColumn(
-                "Explosive Potential", min_value=0, max_value=9, format="%d/9",
-                help="Internal score (5-9) — higher = more signals pointing to a big move today",
+                "Potencial Explosivo", min_value=0, max_value=9, format="%d/9",
+                help="Score interno (5-9) — mayor = más señales apuntando a un gran movimiento hoy",
             ),
-            "Signals":  st.column_config.TextColumn(  "Signals",   help="Technical triggers"),
+            "Signals":  st.column_config.TextColumn(  "Señales",   help="Disparadores técnicos"),
         },
     )
     st.divider()
@@ -1665,10 +1671,12 @@ def render_home_tab():
     # ── Page title ─────────────────────────────────────────────────────────────
     now_et = mkt.get("now_et")
     now_str = now_et.strftime("%A, %B %d · %I:%M %p ET") if now_et else ""
+    _status_labels = {"pre_market": "PRE-MERCADO", "post_market": "CERRADO",
+                      "weekend": "FIN DE SEMANA", "holiday": "FERIADO"}
     status_html = (
-        "<span class='market-open'>● NYSE OPEN</span>"
+        "<span class='market-open'>● NYSE ABIERTO</span>"
         if mkt["is_open"] else
-        f"<span class='market-closed'>○ {mkt['status'].replace('_',' ').upper()}</span>"
+        f"<span class='market-closed'>○ {_status_labels.get(mkt['status'], mkt['status'].replace('_',' ').upper())}</span>"
     )
     # ── STOCKMANIA logo — centered ─────────────────────────────────────────────
     st.markdown(
@@ -1704,7 +1712,7 @@ def render_home_tab():
         st.markdown(
             f"<div style='background:linear-gradient(145deg,#0d1428,#090d1e);"
             f"border:1px solid #1a2040;border-radius:16px;padding:16px;text-align:center;'>"
-            f"<div style='font-size:0.7rem;color:#4a5580;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:4px;'>Fear & Greed Index</div>",
+            f"<div style='font-size:0.7rem;color:#4a5580;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:4px;'>Índice Miedo y Codicia</div>",
             unsafe_allow_html=True,
         )
         fig_gauge = build_fg_gauge(fg_score, fg_rating, fg_color)
@@ -1715,7 +1723,7 @@ def render_home_tab():
         d_col = "#00d4aa" if delta >= 0 else "#ef5350"
         st.markdown(
             f"<div style='text-align:center;margin-top:-12px;'>"
-            f"<span style='color:#4a5580;font-size:0.75rem;'>vs ayer: </span>"
+            f"<span style='color:#4a5580;font-size:0.75rem;'>vs ayer:</span>"
             f"<span style='color:{d_col};font-weight:700;font-size:0.82rem;'>{delta:+.1f}</span>"
             f"<span style='color:#4a5580;font-size:0.72rem;'> · {fg.get('source','')[:20]}</span>"
             f"</div>",
@@ -1873,7 +1881,7 @@ def render_home_tab():
         st.info("Corre un scan primero para ver los picks del día.")
 
     st.divider()
-    st.caption(f"Data: Yahoo Finance · Google News RSS · CNN Fear & Greed · {now_str}")
+    st.caption(f"Datos: Yahoo Finance · Google News RSS · CNN Fear & Greed · {now_str}")
 
 
 def render_scanner_tab():
@@ -1882,23 +1890,23 @@ def render_scanner_tab():
     # Header — market clock
     col_title, col_clock = st.columns([3, 1])
     with col_title:
-        st.header("Market Scanner")
+        st.header("Escáner de Mercado")
         st.caption(
-            f"Scans {sum(len(v) for v in WATCHLIST.values())} tickers across "
-            f"{len(WATCHLIST)} sectors · cache refreshes every 15 min"
+            f"Escanea {sum(len(v) for v in WATCHLIST.values())} tickers en "
+            f"{len(WATCHLIST)} sectores · caché se actualiza cada 15 min"
         )
     with col_clock:
         now_str = mkt["now_et"].strftime("%I:%M %p ET") if mkt.get("now_et") else ""
         if mkt["is_open"]:
             st.markdown(
                 f"<div style='text-align:right;padding-top:18px;'>"
-                f"<span style='color:#00d4aa;font-size:1.1rem;font-weight:700;'>● OPEN</span><br/>"
+                f"<span style='color:#00d4aa;font-size:1.1rem;font-weight:700;'>● ABIERTO</span><br/>"
                 f"<span style='color:#666;font-size:0.8rem;'>{now_str}</span></div>",
                 unsafe_allow_html=True,
             )
         else:
-            label = {"pre_market": "PRE-MARKET", "post_market": "CLOSED",
-                     "weekend": "WEEKEND", "holiday": "HOLIDAY"}.get(mkt["status"], "CLOSED")
+            label = {"pre_market": "PRE-MERCADO", "post_market": "CERRADO",
+                     "weekend": "FIN DE SEMANA", "holiday": "FERIADO"}.get(mkt["status"], "CERRADO")
             st.markdown(
                 f"<div style='text-align:right;padding-top:18px;'>"
                 f"<span style='color:#888;font-size:1.1rem;font-weight:700;'>○ {label}</span><br/>"
@@ -1909,37 +1917,37 @@ def render_scanner_tab():
     # Market-closed warning
     if not mkt["is_open"]:
         st.warning(
-            f"**{mkt['message']}**  — Recommendations below are for planning. "
-            "Execute only when NYSE opens (9:30 AM ET, Mon–Fri).",
+            f"**{mkt['message']}**  — Las recomendaciones son para planificación. "
+            "Ejecuta solo cuando NYSE abra (9:30 AM ET, Lun–Vie).",
             icon="⏰",
         )
 
     # Scan controls
     col_btn, col_info = st.columns([1, 4])
     with col_btn:
-        force_scan = st.button("🔄 Scan Now", type="primary", use_container_width=True,
-                               help="Force a fresh scan (ignores 15-min cache)")
+        force_scan = st.button("🔄 Escanear", type="primary", use_container_width=True,
+                               help="Forzar nuevo escaneo (ignora caché de 15 min)")
     with col_info:
-        st.caption("Click **Scan Now** to refresh · scanner runs automatically on first load")
+        st.caption("Clic en **Escanear** para actualizar · el escáner corre automáticamente al cargar")
 
     # Run scan
-    with st.spinner("Scanning market… first run may take 30-60 sec"):
+    with st.spinner("Escaneando mercado… el primer escaneo puede tomar 30-60 seg"):
         try:
             # Clear cache if force
             if force_scan:
                 cached_scan.clear()
             scan_data = cached_scan(force=False)
         except Exception as e:
-            st.error(f"Scanner error: {e}")
+            st.error(f"Error en el escáner: {e}")
             return
 
     if "error" in scan_data:
-        st.error(f"Download failed: {scan_data['error']}")
+        st.error(f"Error de descarga: {scan_data['error']}")
         return
 
     cached_at = scan_data.get("cached_at", "")[:16].replace("T", " ")
     total = scan_data.get("total_scanned", 0)
-    st.caption(f"Last scan: {cached_at} · {total} tickers evaluated")
+    st.caption(f"Último escaneo: {cached_at} · {total} tickers evaluados")
 
     # ── Fear & Greed + Day-of-week banner ──────────────────────────────────────
     fg   = cached_fear_greed()
@@ -1956,11 +1964,11 @@ def render_scanner_tab():
         st.markdown(
             f"<div style='background:#0e1117;border:1px solid {fg_color}33;"
             f"border-radius:10px;padding:10px 14px;'>"
-            f"<div style='font-size:0.72rem;color:#666;letter-spacing:0.5px;'>FEAR & GREED INDEX</div>"
+            f"<div style='font-size:0.72rem;color:#666;letter-spacing:0.5px;'>ÍNDICE MIEDO Y CODICIA</div>"
             f"<div style='font-size:1.6rem;font-weight:900;color:{fg_color};line-height:1.1;'>"
             f"{fg_score:.0f}<span style='font-size:0.9rem;font-weight:400;color:#888;'>/100</span></div>"
             f"<div style='color:{fg_color};font-size:0.85rem;font-weight:700;'>{fg_rating}</div>"
-            f"<div style='color:#555;font-size:0.72rem;margin-top:2px;'>vs yesterday: "
+            f"<div style='color:#555;font-size:0.72rem;margin-top:2px;'>vs ayer: "
             f"<span style='color:{'#00d4aa' if fg_delta >= 0 else '#ef5350'};'>{fg_delta:+.1f}</span></div>"
             f"</div>",
             unsafe_allow_html=True,
@@ -1977,7 +1985,7 @@ def render_scanner_tab():
             st.markdown(
                 f"<div style='background:#0e1117;border:1px solid {dow_bcol}33;"
                 f"border-radius:10px;padding:10px 14px;height:100%;'>"
-                f"<div style='font-size:0.72rem;color:#666;letter-spacing:0.5px;'>DAY-OF-WEEK EFFECT</div>"
+                f"<div style='font-size:0.72rem;color:#666;letter-spacing:0.5px;'>EFECTO DÍA DE SEMANA</div>"
                 f"<div style='font-size:1.2rem;font-weight:900;color:{dow_bcol};'>"
                 f"{dow_name} <span style='font-size:0.85rem;'>({adj_str} bias)</span></div>"
                 f"<div style='color:#888;font-size:0.78rem;margin-top:3px;'>{dow_note}</div>"
@@ -1990,18 +1998,18 @@ def render_scanner_tab():
         bias_note = bias.get("note", "")
         bias_sig  = bias.get("signal", "neutral")
         sig_icons = {
-            "contrarian_buy":  ("BUY DIP", "#00d4aa"),
-            "caution":         ("SELECTIVE", "#f39c12"),
-            "neutral":         ("NEUTRAL", "#aaa"),
-            "caution_greed":   ("TIGHTEN STOPS", "#f39c12"),
-            "contrarian_sell": ("REDUCE EXPOSURE", "#ef5350"),
+            "contrarian_buy":  ("COMPRAR DIP",   "#00d4aa"),
+            "caution":         ("SELECTIVO",      "#f39c12"),
+            "neutral":         ("NEUTRAL",        "#aaa"),
+            "caution_greed":   ("AJUSTAR STOPS",  "#f39c12"),
+            "contrarian_sell": ("REDUCIR EXPO",   "#ef5350"),
         }
         sig_label, sig_color = sig_icons.get(bias_sig, ("NEUTRAL", "#aaa"))
         fg_source = fg.get("source", "")
         st.markdown(
             f"<div style='background:#0e1117;border:1px solid {sig_color}33;"
             f"border-radius:10px;padding:10px 14px;'>"
-            f"<div style='font-size:0.72rem;color:#666;letter-spacing:0.5px;'>MARKET SIGNAL</div>"
+            f"<div style='font-size:0.72rem;color:#666;letter-spacing:0.5px;'>SEÑAL DE MERCADO</div>"
             f"<div style='font-size:1.1rem;font-weight:900;color:{sig_color};'>{sig_label}</div>"
             f"<div style='color:#777;font-size:0.76rem;margin-top:3px;'>{bias_note}</div>"
             f"<div style='color:#444;font-size:0.68rem;margin-top:4px;'>{fg_source}</div>"
@@ -2035,10 +2043,10 @@ def render_scanner_tab():
         generated_at = picks_data.get("generated_at", "")[:16].replace("T", " ")
         last_upd     = picks_data.get("last_updated", "")[:16].replace("T", " ")
         date_label   = picks_data.get("date", "today")
-        st.subheader(f"Daily Watchlist — {date_label}")
+        st.subheader(f"Watchlist Diario — {date_label}")
         st.caption(
-            f"Generated at {generated_at} · Last updated {last_upd} · "
-            "Auto-refreshes every 15 min · Learns from wins/losses automatically"
+            f"Generado a las {generated_at} · Actualizado {last_upd} · "
+            "Se actualiza cada 15 min · Aprende de victorias/pérdidas automáticamente"
         )
         render_daily_watchlist(
             picks_data.get("daily_top_10", []) + picks_data.get("closed_picks", []),
@@ -2048,7 +2056,7 @@ def render_scanner_tab():
         # Closed/auto-learned picks for today
         closed = picks_data.get("closed_picks", [])
         if closed:
-            with st.expander(f"Closed picks today ({len(closed)})"):
+            with st.expander(f"Picks cerrados hoy ({len(closed)})"):
                 for p in closed:
                     outcome_col = "#00d4aa" if p.get("outcome") == "win" else "#ef5350"
                     st.markdown(
@@ -2062,7 +2070,7 @@ def render_scanner_tab():
                         unsafe_allow_html=True,
                     )
     except Exception as e:
-        st.warning(f"Could not load daily picks: {e}")
+        st.warning(f"No se pudieron cargar los picks diarios: {e}")
 
     st.divider()
 
@@ -2070,7 +2078,7 @@ def render_scanner_tab():
     render_explosive_movers(scan_data)
 
     # ── Today's scanner results (buys / sells) ─────────────────────────────────
-    st.subheader("Scanner — All Opportunities Today")
+    st.subheader("Escáner — Todas las Oportunidades Hoy")
 
     # Fetch earnings for top buys/sells (non-blocking: empty dict if it fails)
     all_scan_tickers = tuple(
@@ -2085,10 +2093,10 @@ def render_scanner_tab():
     col_buy, col_sell = st.columns(2)
 
     with col_buy:
-        st.subheader("Top Buys")
+        st.subheader("Mejores Compras")
         buys = scan_data.get("top_buys", [])
         if not buys:
-            st.info("No strong buy signals right now.")
+            st.info("Sin señales fuertes de compra ahora mismo.")
         for r in buys[:5]:
             manip = r.get("manipulation_flags", [])
             has_alert = any(f["severity"] == "high" for f in manip)
@@ -2116,7 +2124,7 @@ def render_scanner_tab():
                         f"<div style='text-align:right;'>"
                         f"<div style='color:#00d4aa;font-weight:700;font-size:1.1rem;'>${r['current_price']:.2f}</div>"
                         f"<div style='color:#{'00d4aa' if r['change_1d_pct'] >= 0 else 'ef5350'};font-size:0.85rem;'>"
-                        f"{r['change_1d_pct']:+.1f}% today</div>"
+                        f"{r['change_1d_pct']:+.1f}% hoy</div>"
                         f"<div style='color:#888;font-size:0.78rem;'>RSI {r['rsi']:.0f} · vol {r['volume_ratio']:.1f}x</div>"
                         f"</div>",
                         unsafe_allow_html=True,
@@ -2140,10 +2148,10 @@ def render_scanner_tab():
             st.divider()
 
     with col_sell:
-        st.subheader("Top Sells / Short")
+        st.subheader("Mejores Ventas / Short")
         sells = scan_data.get("top_sells", [])
         if not sells:
-            st.info("No strong sell signals right now.")
+            st.info("Sin señales fuertes de venta ahora mismo.")
         for r in sells[:5]:
             manip = r.get("manipulation_flags", [])
             has_alert = any(f["severity"] == "high" for f in manip)
@@ -2164,7 +2172,7 @@ def render_scanner_tab():
                         f"<div style='text-align:right;'>"
                         f"<div style='color:#ef5350;font-weight:700;font-size:1.1rem;'>${r['current_price']:.2f}</div>"
                         f"<div style='color:#{'00d4aa' if r['change_1d_pct'] >= 0 else 'ef5350'};font-size:0.85rem;'>"
-                        f"{r['change_1d_pct']:+.1f}% today</div>"
+                        f"{r['change_1d_pct']:+.1f}% hoy</div>"
                         f"<div style='color:#888;font-size:0.78rem;'>RSI {r['rsi']:.0f} · vol {r['volume_ratio']:.1f}x</div>"
                         f"</div>",
                         unsafe_allow_html=True,
@@ -2181,7 +2189,7 @@ def render_scanner_tab():
     # ── Manipulation alerts ────────────────────────────────────────────────────
     alerts = scan_data.get("manipulation_alerts", [])
     if alerts:
-        with st.expander(f"⚠ Manipulation / Anomaly Alerts ({len(alerts)})", expanded=len(alerts) > 0):
+        with st.expander(f"⚠ Alertas de Manipulación / Anomalía ({len(alerts)})", expanded=len(alerts) > 0):
             for a in alerts:
                 sev_col = {"high": "#ef5350", "medium": "#f39c12", "low": "#aaa"}.get(a["severity"], "#aaa")
                 st.markdown(
@@ -2194,7 +2202,7 @@ def render_scanner_tab():
     # ── Full results table ─────────────────────────────────────────────────────
     all_results = scan_data.get("all_results", [])
     if all_results:
-        with st.expander(f"Full Ranking — All {len(all_results)} tickers"):
+        with st.expander(f"Ranking Completo — {len(all_results)} tickers"):
             df = pd.DataFrame([{
                 "Ticker":      r["ticker"],
                 "Sector":      r.get("sector", ""),
@@ -2213,16 +2221,16 @@ def render_scanner_tab():
                 hide_index=True,
                 use_container_width=True,
                 column_config={
-                    "Ticker":    st.column_config.TextColumn(   "Ticker",  help="Stock ticker symbol (e.g. AAPL, NVDA)"),
-                    "Sector":    st.column_config.TextColumn(   "Sector",  help="Market sector this company belongs to"),
-                    "Rec":       st.column_config.TextColumn(   "Rec",     help="Buy, Sell, or Wait — based on combined score"),
-                    "Score":     st.column_config.NumberColumn( "Score",   format="%.3f",  help="Combined signal score: +1.0 = very bullish, -1.0 = very bearish. |Score| > 0.4 = strong conviction"),
-                    "RSI":       st.column_config.NumberColumn( "RSI",     format="%.0f",  help="Relative Strength Index (14-period). <30 = oversold (buy zone), >70 = overbought (sell zone)"),
-                    "Price":     st.column_config.NumberColumn( "Price",   format="$%.2f", help="Current market price in USD"),
-                    "1d %":      st.column_config.NumberColumn( "1d %",    format="%.1f%%",help="Price change today vs yesterday's close"),
-                    "5d %":      st.column_config.NumberColumn( "5d %",    format="%.1f%%",help="Price change over the last 5 trading days (weekly momentum)"),
-                    "Vol Ratio": st.column_config.NumberColumn( "Vol x",   format="%.1fx", help="Today's volume vs 20-day average. >2x = elevated activity; >5x = unusual — check for manipulation"),
-                    "Alerts":    st.column_config.NumberColumn( "Alerts",  format="%d",    help="Number of manipulation / anomaly flags detected (volume spike, gap, short squeeze, etc.)"),
+                    "Ticker":    st.column_config.TextColumn(   "Ticker",  help="Símbolo de la acción (ej. AAPL, NVDA)"),
+                    "Sector":    st.column_config.TextColumn(   "Sector",  help="Sector del mercado al que pertenece la empresa"),
+                    "Rec":       st.column_config.TextColumn(   "Rec",     help="Buy, Sell o Wait — basado en score combinado"),
+                    "Score":     st.column_config.NumberColumn( "Score",   format="%.3f",  help="Score combinado: +1.0 = muy alcista, -1.0 = muy bajista. |Score| > 0.4 = alta convicción"),
+                    "RSI":       st.column_config.NumberColumn( "RSI",     format="%.0f",  help="Índice de Fuerza Relativa (14 períodos). <30 = sobrevendido, >70 = sobrecomprado"),
+                    "Price":     st.column_config.NumberColumn( "Precio",  format="$%.2f", help="Precio actual de mercado en USD"),
+                    "1d %":      st.column_config.NumberColumn( "1d %",    format="%.1f%%",help="Cambio de precio hoy vs cierre de ayer"),
+                    "5d %":      st.column_config.NumberColumn( "5d %",    format="%.1f%%",help="Cambio de precio en los últimos 5 días hábiles (momentum semanal)"),
+                    "Vol Ratio": st.column_config.NumberColumn( "Vol x",   format="%.1fx", help="Volumen de hoy vs promedio 20 días. >2x = actividad elevada; >5x = inusual — revisar manipulación"),
+                    "Alerts":    st.column_config.NumberColumn( "Alertas", format="%d",    help="Número de flags de manipulación / anomalía detectados (spike de volumen, gap, short squeeze, etc.)"),
                 },
             )
 
@@ -2294,7 +2302,7 @@ with tab2:
             st.warning("Historial de precios no disponible.")
 
         st.divider()
-        st.subheader("Scores por módulo")
+        st.subheader("Scores por Módulo")
         render_score_cards(data)
         st.divider()
 
