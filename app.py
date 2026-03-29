@@ -1780,14 +1780,20 @@ def render_home_tab():
         if mkt["is_open"] else
         f"<span class='market-closed'>○ {mkt['status'].replace('_',' ').upper()}</span>"
     )
+    # ── STOCKMANIA logo — centered ─────────────────────────────────────────────
     st.markdown(
-        f"<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;'>"
-        f"<div>"
-        f"<div style='font-size:1.6rem;font-weight:800;color:#ccd6f6;'>Dashboard</div>"
-        f"<div style='color:#4a5580;font-size:0.82rem;margin-top:2px;'>{now_str}</div>"
-        f"</div>"
-        f"<div>{status_html}</div>"
-        f"</div>",
+        "<div style='text-align:center;padding:10px 0 6px;'>"
+        "<div style='"
+        "display:inline-block;"
+        "font-size:3.2rem;font-weight:900;letter-spacing:2px;"
+        "color:#f5a623;"
+        "-webkit-text-stroke:3px #b36c00;"
+        "text-shadow:0 3px 0 #7a4d00,0 6px 18px #00000099,0 0 40px #f5a62335;"
+        "font-family:Impact,\"Arial Black\",sans-serif !important;"
+        "line-height:1;'>STOCKMANIA</div>"
+        f"<div style='font-size:0.72rem;color:#4a5580;letter-spacing:2px;"
+        f"text-transform:uppercase;margin-top:6px;'>{now_str} &nbsp;·&nbsp; {status_html}</div>"
+        "</div>",
         unsafe_allow_html=True,
     )
     st.divider()
