@@ -80,7 +80,7 @@ def _fetch_yfinance_news(ticker: str, max_items: int) -> list[dict]:
             title = article.get("title", "")
             summary = article.get("summary", "") or ""
             pub_ts = article.get("providerPublishTime", 0)
-            pub_date = datetime.fromtimestamp(pub_ts, tz=timezone.utc).strftime("%Y-%m-%d") if pub_ts else "unknown"
+            pub_date = datetime.fromtimestamp(pub_ts, tz=timezone.utc).strftime("%b %d · %H:%M") if pub_ts else "unknown"
             combined = f"{title}. {summary}"
             score = _score_text(combined)
             items.append({
@@ -111,7 +111,8 @@ def _fetch_google_rss_news(ticker: str, company_name: str, max_items: int) -> li
             try:
                 # feedparser returns a time.struct_time in entry.published_parsed
                 if entry.get("published_parsed"):
-                    pub_date = datetime(*entry.published_parsed[:3]).strftime("%Y-%m-%d")
+                    pt = entry.published_parsed
+                    pub_date = datetime(pt[0], pt[1], pt[2], pt[3], pt[4]).strftime("%b %d · %H:%M")
                 else:
                     pub_date = pub[:10] if len(pub) >= 10 else "unknown"
             except Exception:

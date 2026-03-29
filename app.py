@@ -285,15 +285,41 @@ div[data-testid="metric-container"] {
 hr { border-color: #1a2040 !important; margin: 18px 0 !important; }
 
 /* ── Expanders ── */
-[data-testid="stExpander"] details {
+div[data-testid="stExpander"] {
     background: #0d1428;
-    border: 1px solid #1a2040;
-    border-radius: 12px;
+    border: 1px solid #1a2040 !important;
+    border-radius: 12px !important;
 }
-[data-testid="stExpander"] details summary {
-    font-weight: 600;
-    color: #8892b0;
-    padding: 10px 14px;
+
+/* ── Sidebar radio → vertical nav ── */
+[data-testid="stSidebar"] [data-testid="stRadio"] > label { display: none; }
+[data-testid="stSidebar"] [data-testid="stRadio"] > div   { gap: 3px !important; }
+[data-testid="stSidebar"] [data-testid="stRadio"] label {
+    display: flex !important;
+    align-items: center !important;
+    padding: 10px 14px !important;
+    border-radius: 10px !important;
+    border: 1px solid transparent !important;
+    color: #4a5580 !important;
+    font-weight: 500 !important;
+    font-size: 0.9rem !important;
+    cursor: pointer !important;
+    transition: background 0.15s, color 0.15s !important;
+    margin: 0 !important;
+    width: 100% !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+    background: #ffffff08 !important;
+    color: #8892b0 !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {
+    background: linear-gradient(135deg,#4f9cf918,#00d4aa0e) !important;
+    border-color: #4f9cf930 !important;
+    color: #ccd6f6 !important;
+    box-shadow: 0 2px 10px #4f9cf910 !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] input[type="radio"] {
+    display: none !important;
 }
 
 /* ── Buttons ── */
@@ -989,19 +1015,18 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
 
-    # ── Deep-dive ticker ────────────────────────────────────────────────────────
+    # ── Vertical navigation ──────────────────────────────────────────────────────
     st.markdown(
-        "<div style='font-size:0.7rem;color:#4a5580;text-transform:uppercase;"
-        "letter-spacing:0.8px;margin-bottom:6px;'>Análisis Individual</div>",
+        "<div style='font-size:0.68rem;color:#2a3a5a;text-transform:uppercase;"
+        "letter-spacing:0.8px;margin:4px 0 8px 4px;'>NAVEGACIÓN</div>",
         unsafe_allow_html=True,
     )
-    ticker_input = st.text_input(
-        "ticker", value="AAPL", max_chars=10,
-        placeholder="AAPL, TSLA, NVDA...",
+    page = st.radio(
+        "nav",
+        options=["🏠  Home", "🔍  Scanner", "📊  Análisis", "💼  Trades", "🧠  Learning"],
         label_visibility="collapsed",
-    ).upper().strip()
-
-    analyze_btn = st.button("Analizar →", type="primary", use_container_width=True)
+        key="nav_page",
+    )
 
     st.divider()
 
@@ -1016,18 +1041,19 @@ with st.sidebar:
 
     # ── Data sources ────────────────────────────────────────────────────────────
     st.markdown(
-        "<div style='font-size:0.7rem;color:#4a5580;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;'>Fuentes de datos</div>"
-        "<div style='font-size:0.78rem;color:#2a3a5a;line-height:1.8;'>"
+        "<div style='font-size:0.68rem;color:#2a3a5a;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;'>Fuentes</div>"
+        "<div style='font-size:0.78rem;color:#2a3a5a;line-height:1.9;'>"
         "📊 Yahoo Finance<br/>📰 Google News RSS<br/>🧠 VADER Sentiment<br/>📈 CNN Fear & Greed"
         "</div>"
-        "<div style='margin-top:12px;font-size:0.7rem;color:#2a3050;'>Sin API keys · 100% gratis</div>",
+        "<div style='margin-top:10px;font-size:0.68rem;color:#1e2840;'>Sin API keys · 100% gratis</div>",
         unsafe_allow_html=True,
     )
 
 
 # ── Main layout ────────────────────────────────────────────────────────────────
 
-tab0, tab1, tab2, tab3, tab4 = st.tabs(["🏠 Home", "🔍 Scanner", "📊 Analysis", "💼 Trades", "🧠 Learning"])
+# page is set by the sidebar radio — default to Home on first load
+_page = st.session_state.get("nav_page", "🏠  Home")
 
 # ── Tab 1: Market Scanner ─────────────────────────────────────────────────────
 
@@ -2200,7 +2226,14 @@ def render_scanner_tab():
                                 f"<span style='color:#f39c12;font-size:0.78rem;'>⚠ {f['detail']}</span>",
                                 unsafe_allow_html=True,
                             )
-                with st.expander(f"Por qué comprar {r['ticker']}"):
+                _reason_key = f"show_reason_{r['ticker']}"
+                if st.button(
+                    f"{'▼' if st.session_state.get(_reason_key) else '▶'}  Ver razon de compra",
+                    key=f"btn_{_reason_key}",
+                    use_container_width=True,
+                ):
+                    st.session_state[_reason_key] = not st.session_state.get(_reason_key, False)
+                if st.session_state.get(_reason_key, False):
                     _render_buy_reason(r)
             st.divider()
 
@@ -2292,107 +2325,108 @@ def render_scanner_tab():
             )
 
 
-with tab0:
+if _page == "🏠  Home":
     render_home_tab()
 
-with tab1:
+elif _page == "🔍  Scanner":
     render_scanner_tab()
 
-# ── Tab 2: Deep-dive Analysis ─────────────────────────────────────────────────
+elif _page == "📊  Análisis":
+    # ── Ticker input lives here now ────────────────────────────────────────────
+    st.markdown(
+        "<div class='section-header' style='margin-top:0;'>📊 Análisis de Acción</div>",
+        unsafe_allow_html=True,
+    )
+    col_inp, col_btn = st.columns([3, 1])
+    with col_inp:
+        ticker_input = st.text_input(
+            "ticker", value=st.session_state.get("last_ticker_input", "AAPL"),
+            max_chars=10, placeholder="AAPL · TSLA · NVDA · MSFT...",
+            label_visibility="collapsed",
+        ).upper().strip()
+        st.session_state.last_ticker_input = ticker_input
+    with col_btn:
+        analyze_btn = st.button("Analizar →", type="primary", use_container_width=True)
 
-with tab2:
-    # Keep last analyzed ticker in session state for page refreshes
+    st.divider()
+
     if "last_ticker" not in st.session_state:
         st.session_state.last_ticker = None
 
     should_run = analyze_btn or (
-        st.session_state.last_ticker == ticker_input and
-        ticker_input is not None
+        st.session_state.last_ticker == ticker_input and ticker_input is not None
     )
 
     if not should_run:
         st.markdown(
-            "<div style='text-align:center; margin-top:80px; color:#555;'>"
-            "<div style='font-size:4rem;'>📊</div>"
-            "<div style='font-size:1.3rem; margin-top:12px;'>Enter a ticker in the sidebar and click Analyze</div>"
-            "<div style='font-size:0.9rem; margin-top:8px;'>e.g. AAPL · TSLA · NVDA · MSFT · AMZN</div>"
-            "<div style='font-size:0.85rem; margin-top:16px; color:#444;'>"
-            "Tip: use the Scanner tab to discover opportunities first</div>"
+            "<div style='text-align:center;margin-top:60px;'>"
+            "<div style='font-size:3.5rem;'>📊</div>"
+            "<div style='font-size:1.2rem;color:#4a5580;margin-top:12px;'>Ingresa un ticker arriba y presiona Analizar</div>"
+            "<div style='font-size:0.85rem;color:#2a3a5a;margin-top:8px;'>Ej: AAPL · TSLA · NVDA · MSFT · AMZN</div>"
             "</div>",
             unsafe_allow_html=True,
         )
     else:
         st.session_state.last_ticker = ticker_input
-
-        with st.spinner(f"Analyzing {ticker_input}... this may take ~20 seconds on first run"):
+        with st.spinner(f"Analizando {ticker_input}... puede tomar ~20 seg la primera vez"):
             try:
                 data     = cached_run_analysis(ticker_input)
                 df_price = cached_price_history(ticker_input)
             except SystemExit:
-                st.error(f"Ticker '{ticker_input}' not found. Check the symbol and try again.")
+                st.error(f"Ticker '{ticker_input}' no encontrado. Verifica el símbolo.")
                 st.stop()
             except Exception as e:
-                st.error(f"Analysis failed: {e}")
+                st.error(f"Error en análisis: {e}")
                 st.stop()
 
-        # ── Header ────────────────────────────────────────────────────────────
         render_header(ticker_input, data["overview"], data["decision"])
         st.divider()
 
-        # ── Description ───────────────────────────────────────────────────────
         desc = data["overview"].get("description", "")
         if desc and desc != "No description available.":
-            with st.expander("Company Description", expanded=False):
+            with st.expander("Descripción de la empresa", expanded=False):
                 st.write(desc)
 
-        # ── Chart ─────────────────────────────────────────────────────────────
         if not df_price.empty:
             st.plotly_chart(build_chart(df_price, data["technicals"]),
                             use_container_width=True)
         else:
-            st.warning("Price history unavailable.")
+            st.warning("Historial de precios no disponible.")
 
         st.divider()
-
-        # ── Score cards ───────────────────────────────────────────────────────
-        st.subheader("Module Scores")
+        st.subheader("Scores por módulo")
         render_score_cards(data)
         st.divider()
 
-        # ── Technicals + News side by side ────────────────────────────────────
         col_tech, col_news = st.columns([1, 1])
         with col_tech:
-            st.subheader("Technical Indicators")
+            st.subheader("Indicadores Técnicos")
             render_technicals_table(data["technicals"])
         with col_news:
-            st.subheader("News & Sentiment")
+            st.subheader("Noticias y Sentimiento")
             render_news(data["news"])
 
         st.divider()
-
-        # ── Risk & Opportunity ────────────────────────────────────────────────
-        st.subheader("Risk & Opportunity")
+        st.subheader("Riesgo y Oportunidad")
         render_risk_opportunity(data["risks"], data["opportunities"])
         st.divider()
 
-        # ── Final Verdict ─────────────────────────────────────────────────────
-        st.subheader("Final Verdict")
+        st.subheader("Veredicto Final")
         render_verdict(data["decision"])
 
-        # ── Key Events ────────────────────────────────────────────────────────
         key_events = data["decision"].get("key_events", [])
         if key_events:
-            st.markdown("**Detected Market Events:** " +
+            st.markdown("**Eventos detectados:** " +
                         "  ".join(f"`{e}`" for e in key_events))
 
         st.divider()
         st.caption(
-            f"Analysis cached for 5 minutes · Last run: {data['decision'].get('run_date','N/A')} · "
-            f"Data: Yahoo Finance + Google News RSS"
+            f"Cache 5 min · Último análisis: {data['decision'].get('run_date','N/A')} · "
+            f"Yahoo Finance + Google News RSS"
         )
 
-with tab3:
+elif _page == "💼  Trades":
     render_trades_tab()
 
-with tab4:
+elif _page == "🧠  Learning":
     render_learning_tab()
