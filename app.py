@@ -866,7 +866,7 @@ def render_trades_tab():
             showlegend=False,
             margin=dict(l=10, r=10, t=10, b=40),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
     st.dataframe(
         trades_df,
@@ -970,7 +970,7 @@ def render_learning_tab():
             legend=dict(orientation="h", font=dict(size=10)),
             margin=dict(l=10, r=10, t=10, b=10),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
         # Signal accuracy bar chart
         st.subheader("Signal Accuracy (Latest)")
@@ -1001,7 +1001,7 @@ def render_learning_tab():
             showlegend=False,
             margin=dict(l=10, r=10, t=10, b=80),
         )
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width='stretch')
 
         with st.expander("Raw accuracy table"):
             st.dataframe(latest[["signal_type","accuracy_pct","sample_size","weight"]],
@@ -1614,14 +1614,14 @@ def render_projections_section(conviction_picks: list):
     if len(available) == 1:
         t, p = available[0]
         fig = _build_projection_chart(t, hist_map[t], p)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     else:
         tab_labels = [f"{t} {'▲' if p['recommendation']=='Buy' else '▼'}" for t, p in available]
         tabs = st.tabs(tab_labels)
         for tab, (t, p) in zip(tabs, available):
             with tab:
                 fig = _build_projection_chart(t, hist_map[t], p)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Entry",      f"${p.get('entry_price',0):.2f}")
                 c2.metric("Target +5%", f"${p.get('entry_price',0)*1.05:.2f}")
@@ -1848,7 +1848,7 @@ def render_home_tab():
             unsafe_allow_html=True,
         )
         fig_gauge = build_fg_gauge(fg_score, fg_rating, fg_color)
-        st.plotly_chart(fig_gauge, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_gauge, width='stretch', config={"displayModeBar": False})
 
         prev  = fg.get("prev_close", fg_score)
         delta = fg_score - prev
@@ -2429,8 +2429,7 @@ with tab2:
                 st.write(desc)
 
         if not df_price.empty:
-            st.plotly_chart(build_chart(df_price, data["technicals"]),
-                            use_container_width=True)
+            st.plotly_chart(build_chart(df_price, data["technicals"]), width='stretch')
         else:
             st.warning("Historial de precios no disponible.")
 
