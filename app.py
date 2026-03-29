@@ -479,13 +479,13 @@ def build_chart(df: pd.DataFrame, technicals: dict) -> go.Figure:
     nr = technicals.get("nearest_resistance")
     if ns:
         fig.add_hline(y=ns, line_dash="dot", line_color="#2ecc71", line_width=1,
-                      annotation_text=f"Support ${ns:.2f}",
+                      annotation_text=f"Soporte ${ns:.2f}",
                       annotation_position="bottom right",
                       annotation_font_color="#2ecc71",
                       row=1, col=1)
     if nr:
         fig.add_hline(y=nr, line_dash="dot", line_color="#e74c3c", line_width=1,
-                      annotation_text=f"Resistance ${nr:.2f}",
+                      annotation_text=f"Resistencia ${nr:.2f}",
                       annotation_position="top right",
                       annotation_font_color="#e74c3c",
                       row=1, col=1)
@@ -832,14 +832,14 @@ def render_learning_tab():
 
     weights = load_weights()
     weights_clean = {k: v for k, v in weights.items() if k != "last_updated"}
-    last_updated  = weights.get("last_updated", "Never")
+    last_updated  = weights.get("last_updated", "Nunca")
 
     st.caption(f"Última actualización: {last_updated}")
 
     weights_df = pd.DataFrame(
         [(k, v) for k, v in weights_clean.items()],
-        columns=["Signal", "Weight"]
-    ).sort_values("Weight", ascending=False)
+        columns=["Señal", "Peso"]
+    ).sort_values("Peso", ascending=False)
 
     col1, col2 = st.columns([1, 2])
 
@@ -850,8 +850,8 @@ def render_learning_tab():
             hide_index=True,
             use_container_width=True,
             column_config={
-                "Signal": st.column_config.TextColumn("Señal", help="Señal técnica rastreada por el sistema de aprendizaje (RSI, cruces MA, MACD, etc.)"),
-                "Weight": st.column_config.ProgressColumn(
+                "Señal": st.column_config.TextColumn("Señal", help="Señal técnica rastreada por el sistema de aprendizaje (RSI, cruces MA, MACD, etc.)"),
+                "Peso": st.column_config.ProgressColumn(
                     "Peso", min_value=0.2, max_value=2.0, format="%.3f",
                     help="Peso de aprendizaje: 1.0 = predeterminado, >1.0 = señal precisa, <1.0 = señal poco confiable. Rango: 0.2 – 2.0"
                 ),
@@ -1381,19 +1381,19 @@ def _build_projection_chart(ticker: str, hist: pd.DataFrame, pick: dict) -> go.F
 
     # Entry price line
     fig.add_hline(y=entry, line_dash="dash", line_color="#f39c12", line_width=1.5,
-                  annotation_text=f"Entry ${entry:.2f}",
+                  annotation_text=f"Entrada ${entry:.2f}",
                   annotation_position="right", annotation_font_color="#f39c12",
                   row=1, col=1)
 
     # Target line (+5%)
     fig.add_hline(y=target, line_dash="dot", line_color="#00d4aa", line_width=1.5,
-                  annotation_text=f"Target +5% ${target:.2f}",
+                  annotation_text=f"Objetivo +5% ${target:.2f}",
                   annotation_position="right", annotation_font_color="#00d4aa",
                   row=1, col=1)
 
     # Stop loss line (-3%)
     fig.add_hline(y=stop, line_dash="dot", line_color="#ef5350", line_width=1.5,
-                  annotation_text=f"Stop -3% ${stop:.2f}",
+                  annotation_text=f"Stop -3% ${stop:.2f} ↓",
                   annotation_position="right", annotation_font_color="#ef5350",
                   row=1, col=1)
 
@@ -1801,7 +1801,7 @@ def render_home_tab():
         )
         r2c1.markdown(
             f"<div class='stat-card stat-card-green'>"
-            f"<div style='font-size:0.68rem;color:#4a5580;text-transform:uppercase;letter-spacing:0.7px;'>Wins hoy</div>"
+            f"<div style='font-size:0.68rem;color:#4a5580;text-transform:uppercase;letter-spacing:0.7px;'>Victorias hoy</div>"
             f"<div style='font-size:1.8rem;font-weight:900;color:#00d4aa;margin:6px 0;'>{wins_today}</div>"
             f"<div style='font-size:0.75rem;color:#6b7399;'>picks cerrados ✓</div>"
             f"</div>",
@@ -1809,7 +1809,7 @@ def render_home_tab():
         )
         r2c2.markdown(
             f"<div class='stat-card stat-card-red'>"
-            f"<div style='font-size:0.68rem;color:#4a5580;text-transform:uppercase;letter-spacing:0.7px;'>Stops hit</div>"
+            f"<div style='font-size:0.68rem;color:#4a5580;text-transform:uppercase;letter-spacing:0.7px;'>Stops activados</div>"
             f"<div style='font-size:1.8rem;font-weight:900;color:#ef5350;margin:6px 0;'>{losses_today}</div>"
             f"<div style='font-size:0.75rem;color:#6b7399;'>stops activados hoy</div>"
             f"</div>",
@@ -2062,11 +2062,11 @@ def render_scanner_tab():
                     st.markdown(
                         f"{_status_badge(p['status'])} &nbsp;"
                         f"**{p['ticker']}** {p['recommendation']} · "
-                        f"Entry ${p.get('entry_price',0):.2f} → "
-                        f"Exit ${p.get('current_price',0):.2f} · "
+                        f"Entrada ${p.get('entry_price',0):.2f} → "
+                        f"Salida ${p.get('current_price',0):.2f} · "
                         f"<span style='color:{outcome_col};font-weight:700;'>"
                         f"{p.get('pnl_pct',0):+.2f}%</span> · "
-                        f"Signals: {', '.join(p.get('signals',[])[:3])}",
+                        f"Señales: {', '.join(p.get('signals',[])[:3])}",
                         unsafe_allow_html=True,
                     )
     except Exception as e:
