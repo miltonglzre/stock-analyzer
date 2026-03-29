@@ -40,53 +40,20 @@ st.set_page_config(
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="collapsed",
+    menu_items={},
 )
 
 # ── Password gate ─────────────────────────────────────────────────────────────
-import streamlit.components.v1 as _components
-
 def _check_password() -> bool:
-    """
-    Returns True if the user is authenticated.
-    Auth persists across page refreshes (stored in browser sessionStorage).
-    Clears when the tab is closed.
-    """
     required_pw = None
     try:
         required_pw = st.secrets.get("APP_PASSWORD", None)
     except Exception:
         pass
-
     if not required_pw:
         return True
-
-    # Already authenticated in this Python session
     if st.session_state.get("authenticated"):
         return True
-
-    # JS bridge: if sessionStorage has auth token → add ?_sm=ok to URL → Streamlit sees it
-    _components.html("""
-    <script>
-    (function() {
-        try {
-            if (sessionStorage.getItem('_sm_auth') === '1') {
-                var url = new URL(window.parent.location.href);
-                if (url.searchParams.get('_sm') !== 'ok') {
-                    url.searchParams.set('_sm', 'ok');
-                    window.parent.location.replace(url.toString());
-                }
-            }
-        } catch(e) {}
-    })();
-    </script>
-    """, height=0, scrolling=False)
-
-    # If JS already set the param on a previous run, trust it
-    if st.query_params.get("_sm") == "ok":
-        st.session_state.authenticated = True
-        return True
-
-    # ── Login form ──────────────────────────────────────────────────────────
     st.markdown(
         "<div style='max-width:360px; margin:120px auto; text-align:center;'>"
         "<div style='font-size:3rem;'>📈</div>"
@@ -101,45 +68,13 @@ def _check_password() -> bool:
         if st.button("Login", type="primary", use_container_width=True):
             if pw == required_pw:
                 st.session_state.authenticated = True
-                # Save to sessionStorage + redirect to ?_sm=ok (persists on refresh)
-                _components.html("""
-                <script>
-                (function() {
-                    try {
-                        sessionStorage.setItem('_sm_auth', '1');
-                        var url = new URL(window.parent.location.href);
-                        url.searchParams.set('_sm', 'ok');
-                        window.parent.location.replace(url.toString());
-                    } catch(e) {}
-                })();
-                </script>
-                """, height=0, scrolling=False)
+                st.rerun()
             else:
                 st.error("Incorrect password")
     return False
 
 if not _check_password():
     st.stop()
-
-# ── JS: hide sidebar toggle text artifact ────────────────────────────────────
-_components.html("""
-<script>
-(function() {
-    function hide() {
-        try {
-            var doc = window.parent.document;
-            doc.querySelectorAll(
-                '[data-testid="collapsedControl"],' +
-                '[data-testid="stSidebarCollapsedControl"],' +
-                '[data-testid*="ollapsedControl"]'
-            ).forEach(function(el) { el.style.cssText = 'display:none!important'; });
-        } catch(e) {}
-    }
-    hide();
-    setInterval(hide, 800);
-})();
-</script>
-""", height=0, scrolling=False)
 
 # ── Custom CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -344,19 +279,11 @@ div[data-testid="metric-container"] {
 /* ── Dividers ── */
 hr { border-color: #1a2040 !important; margin: 18px 0 !important; }
 
-/* ── Hide sidebar toggle button (removes keyboard_double_arrow_right text) ── */
+/* ── Hide sidebar completely ── */
+[data-testid="stSidebar"],
 [data-testid="collapsedControl"],
-[data-testid="stSidebarCollapsedControl"],
 [data-testid*="collapsed"],
-[data-testid*="Collapsed"] {
-    display: none !important;
-    visibility: hidden !important;
-    width: 0 !important;
-    height: 0 !important;
-    overflow: hidden !important;
-    position: absolute !important;
-    left: -9999px !important;
-}
+[data-testid*="Collapsed"] { display: none !important; }
 
 /* ── Expanders ── */
 div[data-testid="stExpander"] {
@@ -1010,73 +937,6 @@ def render_learning_tab():
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 
-with st.sidebar:
-    # ── Logo / brand ───────────────────────────────────────────────────────────
-    st.markdown(
-        "<div style='padding:4px 0 20px;text-align:center;'>"
-        "<div style='display:inline-block;"
-        "font-size:1.55rem;font-weight:900;letter-spacing:1px;"
-        "color:#f5a623;"
-        "-webkit-text-stroke:2px #c47d0a;"
-        "text-shadow:0 2px 0 #7a4d00,0 4px 8px #00000088,0 0 20px #f5a62340;"
-        "font-family:Impact,\"Arial Black\",sans-serif !important;"
-        "line-height:1;'>STOCKMANIA</div>"
-        "<div style='font-size:0.62rem;color:#4a5580;letter-spacing:1.5px;"
-        "text-transform:uppercase;margin-top:4px;'>Trading Intelligence</div>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-    # ── Market status ───────────────────────────────────────────────────────────
-    mkt = get_market_status()
-    if mkt["is_open"]:
-        msg_part = mkt['message'].split('—')[1].strip() if '—' in mkt['message'] else ''
-        st.markdown(
-            "<div style='background:linear-gradient(135deg,#0a2018,#061410);"
-            "border:1px solid #00d4aa35;border-radius:10px;"
-            "padding:10px 14px;margin-bottom:16px;'>"
-            "<div style='display:flex;align-items:center;gap:8px;'>"
-            "<span style='color:#00d4aa;font-size:0.7rem;animation:pulse-green 2s infinite;'>●</span>"
-            "<span style='color:#00d4aa;font-weight:700;font-size:0.88rem;'>NYSE ABIERTO</span>"
-            "</div>"
-            f"<div style='color:#4a5580;font-size:0.73rem;margin-top:3px;'>{msg_part}</div>"
-            "</div>",
-            unsafe_allow_html=True,
-        )
-    else:
-        label = {"pre_market": "PRE-MARKET", "post_market": "CERRADO",
-                 "weekend": "FIN DE SEMANA", "holiday": "FERIADO"}.get(mkt["status"], "CERRADO")
-        msg_part = mkt['message'].split('—')[1].strip() if '—' in mkt['message'] else ''
-        st.markdown(
-            "<div style='background:#090d1e;border:1px solid #1a2040;"
-            "border-radius:10px;padding:10px 14px;margin-bottom:16px;'>"
-            "<div style='display:flex;align-items:center;gap:8px;'>"
-            "<span style='color:#2a3a6a;font-size:0.7rem;'>○</span>"
-            f"<span style='color:#4a5580;font-weight:700;font-size:0.88rem;'>{label}</span>"
-            "</div>"
-            f"<div style='color:#2a3a5a;font-size:0.73rem;margin-top:3px;'>{msg_part}</div>"
-            "</div>",
-            unsafe_allow_html=True,
-        )
-
-    # ── Auto-refresh ────────────────────────────────────────────────────────────
-    auto_refresh = st.toggle("Auto-refresh (5 min)", value=False)
-    if auto_refresh:
-        import time
-        time.sleep(300)
-        st.rerun()
-
-    st.divider()
-
-    # ── Data sources ────────────────────────────────────────────────────────────
-    st.markdown(
-        "<div style='font-size:0.68rem;color:#2a3a5a;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;'>Fuentes</div>"
-        "<div style='font-size:0.78rem;color:#2a3a5a;line-height:1.9;'>"
-        "📊 Yahoo Finance<br/>📰 Google News RSS<br/>🧠 VADER Sentiment<br/>📈 CNN Fear & Greed"
-        "</div>"
-        "<div style='margin-top:10px;font-size:0.68rem;color:#1e2840;'>Sin API keys · 100% gratis</div>",
-        unsafe_allow_html=True,
-    )
 
 
 # ── Main layout ────────────────────────────────────────────────────────────────
