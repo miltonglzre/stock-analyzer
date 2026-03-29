@@ -354,25 +354,108 @@ span[translate="no"] { font-family: 'Material Symbols Rounded', serif !important
     z-index: 9998 !important;
     display: flex !important;
     align-items: center !important;
-    min-height: 3rem !important;
+    justify-content: center !important;
+    min-height: 3.2rem !important;
 }
 [data-testid="stHeader"]::before {
-    content: "📈  STOCKMANIA" !important;
-    color: #00d4aa !important;
-    font-weight: 800 !important;
-    font-size: 1.1rem !important;
-    letter-spacing: 0.05em !important;
-    padding-left: 1.5rem !important;
-    flex: 1 !important;
-    font-family: 'Inter', sans-serif !important;
+    content: "STOCKMANIA" !important;
+    color: #f5a623 !important;
+    font-weight: 900 !important;
+    font-size: 1.35rem !important;
+    letter-spacing: 3px !important;
+    font-family: Impact, 'Arial Black', sans-serif !important;
+    text-shadow: 0 2px 0 #7a4d00, 0 4px 14px #00000099 !important;
+    -webkit-text-stroke: 1px #b36c00 !important;
+    position: absolute !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
 }
 [data-testid="stMain"] {
     padding-top: 1rem !important;
 }
 
+/* ── Splash screen de entrada ── */
+@keyframes sm-fade-out {
+    0%   { opacity: 1; transform: scale(1); }
+    70%  { opacity: 1; transform: scale(1.04); }
+    100% { opacity: 0; transform: scale(0.96); pointer-events: none; }
+}
+@keyframes sm-logo-in {
+    0%   { opacity: 0; transform: translateY(30px) scale(0.85); }
+    60%  { opacity: 1; transform: translateY(-6px) scale(1.06); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes sm-sub-in {
+    0%   { opacity: 0; letter-spacing: 0.5em; }
+    100% { opacity: 1; letter-spacing: 0.25em; }
+}
+@keyframes sm-bar-grow {
+    0%   { width: 0%; }
+    100% { width: 100%; }
+}
+#sm-splash {
+    position: fixed !important;
+    inset: 0 !important;
+    background: #090d1e !important;
+    z-index: 99999 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 18px !important;
+    animation: sm-fade-out 0.5s ease-in 2.4s forwards !important;
+    pointer-events: all !important;
+}
+#sm-splash-logo {
+    font-family: Impact, 'Arial Black', sans-serif !important;
+    font-size: clamp(2.8rem, 8vw, 5.5rem) !important;
+    font-weight: 900 !important;
+    color: #f5a623 !important;
+    letter-spacing: 4px !important;
+    text-shadow: 0 4px 0 #7a4d00, 0 8px 32px #00000099 !important;
+    -webkit-text-stroke: 2px #b36c00 !important;
+    animation: sm-logo-in 0.7s cubic-bezier(0.34,1.56,0.64,1) 0.2s both !important;
+    line-height: 1 !important;
+}
+#sm-splash-sub {
+    font-size: 0.85rem !important;
+    color: #00d4aa !important;
+    font-weight: 600 !important;
+    animation: sm-sub-in 0.6s ease-out 0.9s both !important;
+}
+#sm-splash-bar-wrap {
+    width: 220px !important;
+    height: 3px !important;
+    background: #1a2040 !important;
+    border-radius: 4px !important;
+    overflow: hidden !important;
+    margin-top: 8px !important;
+}
+#sm-splash-bar {
+    height: 100% !important;
+    background: linear-gradient(90deg, #00d4aa, #f5a623) !important;
+    border-radius: 4px !important;
+    animation: sm-bar-grow 1.8s ease-out 0.8s both !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
+# ── Splash screen (solo en primera carga, se autoeliminará con CSS animation) ──
+st.markdown(
+    "<div id='sm-splash'>"
+    "<div id='sm-splash-logo'>STOCKMANIA</div>"
+    "<div id='sm-splash-sub'>PLATAFORMA DE ANÁLISIS DE ACCIONES</div>"
+    "<div id='sm-splash-bar-wrap'><div id='sm-splash-bar'></div></div>"
+    "</div>"
+    "<script>"
+    "setTimeout(function(){"
+    "  var s=document.getElementById('sm-splash');"
+    "  if(s) s.style.display='none';"
+    "}, 3000);"
+    "</script>",
+    unsafe_allow_html=True,
+)
 
 # ── Earnings calendar ─────────────────────────────────────────────────────────
 
