@@ -121,9 +121,11 @@ def _score_risks(info: dict) -> tuple[float, list[str]]:
     return penalty, level, reasons
 
 
-def fetch_risk_factors(ticker: str) -> dict:
-    t = yf.Ticker(ticker)
-    info = t.info
+def fetch_risk_factors(ticker: str, _info: dict = None) -> dict:
+    if _info is None:
+        t = yf.Ticker(ticker)
+        _info = t.info
+    info = _info
 
     penalty, level, reasons = _score_risks(info)
 

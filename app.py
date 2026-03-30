@@ -540,13 +540,16 @@ def cached_run_analysis(ticker: str) -> dict:
     from fetch_opportunities import fetch_opportunities
     from decision_engine import make_decision
 
-    overview      = _run_safe(fetch_company_overview, ticker)
-    fundamentals  = _run_safe(fetch_fundamentals, ticker)
-    news          = _run_safe(fetch_news, ticker, overview.get("name", ""))
-    technicals    = _run_safe(fetch_technicals, ticker)
-    risks         = _run_safe(fetch_risk_factors, ticker)
-    opportunities = _run_safe(fetch_opportunities, ticker)
-    decision      = _run_safe(make_decision, ticker)
+    # Fetch t.info once and share across all tools that need it — reduces API calls from 6 to 3
+    _shared_info = _run_safe(lambda: yf.Ticker(ticker).info or {})
+
+    overview      = _run_safe(fetch_company_overview, ticker, _shared_info)
+    fundamentals  = _run_safe(fetch_fundamentals,     ticker, _shared_info)
+    news          = _run_safe(fetch_news,              ticker, overview.get("name", ""))
+    technicals    = _run_safe(fetch_technicals,        ticker)
+    risks         = _run_safe(fetch_risk_factors,      ticker, _shared_info)
+    opportunities = _run_safe(fetch_opportunities,     ticker, _shared_info)
+    decision      = _run_safe(make_decision,           ticker)
 
     return dict(
         overview=overview, fundamentals=fundamentals, news=news,
@@ -2549,19 +2552,12 @@ with tab2:
         _df_price = None
         _fetch_err = None
 
-        st.info(f"🔍 DEBUG: iniciando análisis de **{ticker_input}**...")
-
         with st.spinner(f"Analizando {ticker_input}... puede tomar ~20 seg la primera vez"):
             try:
                 _data     = cached_run_analysis(ticker_input)
-                st.info("🔍 DEBUG: cached_run_analysis OK")
                 _df_price = cached_price_history(ticker_input)
-                st.info("🔍 DEBUG: cached_price_history OK")
             except BaseException as _e:          # catch SystemExit too
                 _fetch_err = _e
-                st.info(f"🔍 DEBUG: excepción capturada → {type(_e).__name__}: {_e}")
-
-        st.info(f"🔍 DEBUG: spinner terminó — _data={'OK' if _data else 'None'}, _fetch_err={_fetch_err}")
 
         # ── Error handling (outside spinner so messages always show) ──────────
         if _fetch_err is not None:

@@ -151,9 +151,9 @@ def _score_fundamentals(metrics: dict) -> tuple[str, float, list[str]]:
     return (rating, score, reasons)
 
 
-def fetch_fundamentals(ticker: str) -> dict:
+def fetch_fundamentals(ticker: str, _info: dict = None) -> dict:
     t = yf.Ticker(ticker)
-    info = t.info
+    info = _info if _info is not None else t.info
 
     try:
         fin = t.financials

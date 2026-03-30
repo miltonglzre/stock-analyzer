@@ -15,9 +15,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 from utils import tmp_path, save_json
 
 
-def fetch_company_overview(ticker: str) -> dict:
-    t = yf.Ticker(ticker)
-    info = t.info
+def fetch_company_overview(ticker: str, _info: dict = None) -> dict:
+    if _info is None:
+        t = yf.Ticker(ticker)
+        _info = t.info
+    info = _info
 
     if not info or info.get("regularMarketPrice") is None and info.get("currentPrice") is None:
         # Try a lightweight check — some tickers return minimal info

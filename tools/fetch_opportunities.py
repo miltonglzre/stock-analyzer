@@ -132,9 +132,9 @@ def _buyback_dividend_score(info: dict) -> tuple[float, list[str]]:
     return bonus, reasons
 
 
-def fetch_opportunities(ticker: str) -> dict:
+def fetch_opportunities(ticker: str, _info: dict = None) -> dict:
     t = yf.Ticker(ticker)
-    info = t.info
+    info = _info if _info is not None else t.info
 
     analyst_bonus, analyst_reasons = _analyst_score(info)
     earnings_bonus, earnings_reasons = _earnings_score(t)
