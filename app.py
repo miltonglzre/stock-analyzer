@@ -2549,12 +2549,19 @@ with tab2:
         _df_price = None
         _fetch_err = None
 
+        st.info(f"🔍 DEBUG: iniciando análisis de **{ticker_input}**...")
+
         with st.spinner(f"Analizando {ticker_input}... puede tomar ~20 seg la primera vez"):
             try:
                 _data     = cached_run_analysis(ticker_input)
+                st.info("🔍 DEBUG: cached_run_analysis OK")
                 _df_price = cached_price_history(ticker_input)
+                st.info("🔍 DEBUG: cached_price_history OK")
             except BaseException as _e:          # catch SystemExit too
                 _fetch_err = _e
+                st.info(f"🔍 DEBUG: excepción capturada → {type(_e).__name__}: {_e}")
+
+        st.info(f"🔍 DEBUG: spinner terminó — _data={'OK' if _data else 'None'}, _fetch_err={_fetch_err}")
 
         # ── Error handling (outside spinner so messages always show) ──────────
         if _fetch_err is not None:
