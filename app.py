@@ -2543,86 +2543,96 @@ with tab2:
         )
     else:
         st.session_state.last_ticker = ticker_input
+
+        # ── Fetch data (spinner only wraps the network calls) ─────────────────
+        _data = None
+        _df_price = None
+        _fetch_err = None
+
         with st.spinner(f"Analizando {ticker_input}... puede tomar ~20 seg la primera vez"):
             try:
-                data     = cached_run_analysis(ticker_input)
-                df_price = cached_price_history(ticker_input)
-            except (SystemExit, ValueError) as e:
-                if "not found" in str(e).lower() or isinstance(e, SystemExit):
-                    st.error(f"Ticker '{ticker_input}' no encontrado. Verifica el símbolo.")
-                else:
-                    st.error(f"Error en análisis: {e}")
-                st.stop()
-            except _RateLimitError:
+                _data     = cached_run_analysis(ticker_input)
+                _df_price = cached_price_history(ticker_input)
+            except BaseException as _e:          # catch SystemExit too
+                _fetch_err = _e
+
+        # ── Error handling (outside spinner so messages always show) ──────────
+        if _fetch_err is not None:
+            _emsg = str(_fetch_err).lower()
+            if isinstance(_fetch_err, _RateLimitError) or any(
+                w in _emsg for w in ["too many", "rate", "429", "limited"]
+            ):
                 st.warning(
                     "⏳ **Yahoo Finance está limitando las consultas.** "
                     "Espera 2-3 minutos e intenta de nuevo. "
                     "Esto ocurre cuando se hacen muchas búsquedas seguidas."
                 )
-                st.stop()
-            except Exception as e:
-                msg = str(e).lower()
-                if "too many" in msg or "rate" in msg or "limited" in msg:
-                    st.warning(
-                        "⏳ **Yahoo Finance está limitando las consultas.** "
-                        "Espera 2-3 minutos e intenta de nuevo."
-                    )
-                else:
-                    st.error(f"Error en análisis: {e}")
-                st.stop()
+            elif "not found" in _emsg or isinstance(_fetch_err, SystemExit):
+                st.error(f"Ticker '{ticker_input}' no encontrado. Verifica el símbolo.")
+            else:
+                st.error(f"Error en análisis: {_fetch_err}")
+            st.stop()
 
+        if _data is None:
+            st.error("No se obtuvieron datos. Intenta de nuevo.")
+            st.stop()
+
+        # ── Render results ────────────────────────────────────────────────────
         try:
-            render_header(ticker_input, data["overview"], data["decision"])
-            render_extended_hours(data["overview"], data["decision"].get("current_price", 0))
+            render_header(ticker_input, _data["overview"], _data["decision"])
+            render_extended_hours(_data["overview"], _data["decision"].get("current_price", 0))
             st.divider()
 
-            desc = data["overview"].get("description", "")
+            desc = _data["overview"].get("description", "")
             if desc and desc != "No description available.":
                 with st.expander("Descripción de la empresa", expanded=False):
                     st.write(desc)
 
-            if not df_price.empty:
-                st.plotly_chart(build_chart(df_price, data["technicals"]), width='stretch')
+            if _df_price is not None and not _df_price.empty:
+                st.plotly_chart(build_chart(_df_price, _data["technicals"]), width='stretch')
             else:
                 st.warning("Historial de precios no disponible.")
 
             st.divider()
             st.subheader("Scores por Módulo")
             render_score_explanation()
-            render_score_cards(data)
+            render_score_cards(_data)
             st.divider()
 
             col_tech, col_news = st.columns([1, 1])
             with col_tech:
                 st.subheader("Indicadores Técnicos")
-                render_technicals_table(data["technicals"])
+                render_technicals_table(_data["technicals"])
             with col_news:
                 st.subheader("Noticias y Sentimiento")
-                render_news(data["news"])
+                render_news(_data["news"])
 
             st.divider()
             st.subheader("Riesgo y Oportunidad")
-            render_risk_opportunity(data["risks"], data["opportunities"])
+            render_risk_opportunity(_data["risks"], _data["opportunities"])
             st.divider()
 
             st.subheader("Veredicto Final")
-            render_verdict(data["decision"])
+            render_verdict(_data["decision"])
             st.divider()
             macro_data = cached_macro_context(ticker_input)
             render_macro_context(macro_data)
 
-            key_events = data["decision"].get("key_events", [])
+            key_events = _data["decision"].get("key_events", [])
             if key_events:
                 st.markdown("**Eventos detectados:** " +
-                            "  ".join(f"`{e}`" for e in key_events))
-        except Exception as _render_err:
-            st.error(f"Error al mostrar resultados: {_render_err}")
+                            "  ".join(f"`{ev}`" for ev in key_events))
 
-        st.divider()
-        st.caption(
-            f"Cache 5 min · Último análisis: {data['decision'].get('run_date','N/A')} · "
-            f"Yahoo Finance + Google News RSS"
-        )
+            st.divider()
+            st.caption(
+                f"Cache 15 min · Último análisis: {_data['decision'].get('run_date','N/A')} · "
+                f"Yahoo Finance + Google News RSS"
+            )
+        except Exception as _render_err:
+            import traceback
+            st.error(f"Error al mostrar resultados: {_render_err}")
+            with st.expander("Detalle del error"):
+                st.code(traceback.format_exc())
 
 with tab3:
     render_trades_tab()
