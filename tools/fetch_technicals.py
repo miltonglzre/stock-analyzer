@@ -291,8 +291,7 @@ def fetch_technicals(ticker: str) -> dict:
     hist = t.history(period=f"{lookback}d", interval="1d")
 
     if hist.empty or len(hist) < 30:
-        print(f"[ERROR] Insufficient price history for {ticker}")
-        sys.exit(1)
+        raise ValueError(f"Insufficient price history for {ticker}")
 
     close = hist["Close"]
     high = hist["High"]

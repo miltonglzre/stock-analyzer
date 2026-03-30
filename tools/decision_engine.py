@@ -103,8 +103,7 @@ def make_decision(ticker: str) -> dict:
             missing.append(name)
 
     if "technicals" in missing:
-        print(f"[ERROR] Missing critical data: technicals. Run fetch_technicals.py first.")
-        sys.exit(1)
+        raise ValueError(f"Missing critical data for {ticker}: {missing}. Fetch tools must run first.")
 
     # ── Extract scores ─────────────────────────────────────────────────────────
     fund_score = fundamentals.get("score", 0.0)

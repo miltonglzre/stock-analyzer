@@ -546,7 +546,7 @@ def cached_run_analysis(ticker: str) -> dict:
     technicals    = _run_safe(fetch_technicals, ticker)
     risks         = _run_safe(fetch_risk_factors, ticker)
     opportunities = _run_safe(fetch_opportunities, ticker)
-    decision      = make_decision(ticker)
+    decision      = _run_safe(make_decision, ticker)
 
     return dict(
         overview=overview, fundamentals=fundamentals, news=news,
