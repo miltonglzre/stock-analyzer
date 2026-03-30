@@ -57,12 +57,16 @@ _DOW_NAMES_ES = {
 }
 
 def get_dow_context() -> dict:
-    """Return today's day-of-week seasonality context."""
-    today = datetime.now()
-    dow   = today.weekday()   # 0=Mon … 4=Fri, 5=Sat, 6=Sun
-    real_name = today.strftime("%A")  # nombre real del día
-    # For market seasonality data, use Friday on weekends
-    market_dow = min(dow, 4)
+    """Return today's day-of-week context in Eastern Time (market timezone)."""
+    try:
+        import pytz
+        et = pytz.timezone("America/New_York")
+        today = datetime.now(et)
+    except Exception:
+        today = datetime.now()
+    dow       = today.weekday()          # 0=Mon … 6=Sun
+    real_name = today.strftime("%A")     # English name for translation
+    market_dow = min(dow, 4)             # cap at Friday for seasonality data
     d = _DOW_DATA[market_dow]
     return {
         "weekday":    dow,

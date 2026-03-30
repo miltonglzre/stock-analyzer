@@ -26,20 +26,23 @@ def fetch_company_overview(ticker: str) -> dict:
             sys.exit(1)
 
     data = {
-        "ticker":           ticker.upper(),
-        "name":             info.get("longName") or info.get("shortName", "N/A"),
-        "sector":           info.get("sector", "N/A"),
-        "industry":         info.get("industry", "N/A"),
-        "country":          info.get("country", "N/A"),
-        "exchange":         info.get("exchange", "N/A"),
-        "market_cap":       info.get("marketCap"),
-        "employees":        info.get("fullTimeEmployees"),
-        "website":          info.get("website", "N/A"),
-        "description":      info.get("longBusinessSummary", "No description available."),
-        "currency":         info.get("currency", "USD"),
-        "current_price":    info.get("currentPrice") or info.get("regularMarketPrice"),
-        "52w_high":         info.get("fiftyTwoWeekHigh"),
-        "52w_low":          info.get("fiftyTwoWeekLow"),
+        "ticker":             ticker.upper(),
+        "name":               info.get("longName") or info.get("shortName", "N/A"),
+        "sector":             info.get("sector", "N/A"),
+        "industry":           info.get("industry", "N/A"),
+        "country":            info.get("country", "N/A"),
+        "exchange":           info.get("exchange", "N/A"),
+        "market_cap":         info.get("marketCap"),
+        "employees":          info.get("fullTimeEmployees"),
+        "website":            info.get("website", "N/A"),
+        "description":        info.get("longBusinessSummary", "No description available."),
+        "currency":           info.get("currency", "USD"),
+        "current_price":      info.get("currentPrice") or info.get("regularMarketPrice"),
+        "52w_high":           info.get("fiftyTwoWeekHigh"),
+        "52w_low":            info.get("fiftyTwoWeekLow"),
+        "prev_close":         info.get("previousClose") or info.get("regularMarketPreviousClose"),
+        "pre_market_price":   info.get("preMarketPrice"),
+        "post_market_price":  info.get("postMarketPrice"),
     }
 
     path = tmp_path(ticker, "overview")

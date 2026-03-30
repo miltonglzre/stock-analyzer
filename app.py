@@ -720,54 +720,12 @@ def render_header(ticker, overview, decision):
         )
 
 
-def _fetch_extended_hours(ticker: str):
-    """
-    Fetch pre/post market prices.
-    Primary  : t.info camelCase keys (preMarketPrice / postMarketPrice).
-    Fallback : history(prepost=True) — parse last pre/post candles.
-    Returns  : (pre, post, prev_close)  — any may be None.
-    """
-    import datetime as _dt
-    pre = post = prev_close = None
+def render_extended_hours(overview: dict, current_price: float):
+    """Show pre/post market and previous close from already-fetched overview data."""
     try:
-        t = yf.Ticker(ticker)
-        fi = t.fast_info
-        prev_close = (getattr(fi, "previous_close", None)
-                      or getattr(fi, "regular_market_previous_close", None))
-
-        # Primary: full info dict has preMarketPrice / postMarketPrice
-        try:
-            info = t.info
-            pre  = info.get("preMarketPrice") or info.get("pre_market_price")
-            post = info.get("postMarketPrice") or info.get("post_market_price")
-        except Exception:
-            pass
-
-        # Fallback: 1-min history with extended hours
-        if not pre and not post:
-            try:
-                import pytz
-                et = pytz.timezone("America/New_York")
-                hist = t.history(period="1d", interval="1m", prepost=True)
-                if not hist.empty:
-                    hist.index = hist.index.tz_convert(et)
-                    pre_rows  = hist[hist.index.time < _dt.time(9, 30)]
-                    post_rows = hist[hist.index.time >= _dt.time(16, 0)]
-                    if not pre_rows.empty:
-                        pre = float(pre_rows["Close"].iloc[-1])
-                    if not post_rows.empty:
-                        post = float(post_rows["Close"].iloc[-1])
-            except Exception:
-                pass
-    except Exception:
-        pass
-    return pre, post, prev_close
-
-
-def render_extended_hours(ticker: str, current_price: float):
-    """Show pre/post market and previous close. Always renders 3 metrics."""
-    try:
-        pre, post, prev_close = _fetch_extended_hours(ticker)
+        pre       = overview.get("pre_market_price")
+        post      = overview.get("post_market_price")
+        prev_close= overview.get("prev_close")
         ref = current_price or 1
         items = []
 
@@ -785,9 +743,10 @@ def render_extended_hours(ticker: str, current_price: float):
             items.append(("📅 Cierre anterior", f"${prev_close:,.2f}",
                           f"{(ref-prev_close)/prev_close*100:+.2f}% hoy"))
 
-        cols = st.columns(len(items))
-        for col, (label, val, delta) in zip(cols, items):
-            col.metric(label, val, delta)
+        if items:
+            cols = st.columns(len(items))
+            for col, (label, val, delta) in zip(cols, items):
+                col.metric(label, val, delta)
     except Exception:
         pass
 
@@ -2610,7 +2569,7 @@ with tab2:
                 st.stop()
 
         render_header(ticker_input, data["overview"], data["decision"])
-        render_extended_hours(ticker_input, data["decision"].get("current_price", 0))
+        render_extended_hours(data["overview"], data["decision"].get("current_price", 0))
         st.divider()
 
         desc = data["overview"].get("description", "")
