@@ -22,8 +22,7 @@ def fetch_company_overview(ticker: str) -> dict:
     if not info or info.get("regularMarketPrice") is None and info.get("currentPrice") is None:
         # Try a lightweight check — some tickers return minimal info
         if not info.get("shortName") and not info.get("longName"):
-            print(f"[ERROR] Ticker '{ticker}' not found or no data available.")
-            sys.exit(1)
+            raise ValueError(f"Ticker '{ticker}' not found or no data available.")
 
     data = {
         "ticker":             ticker.upper(),

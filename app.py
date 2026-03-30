@@ -2547,8 +2547,11 @@ with tab2:
             try:
                 data     = cached_run_analysis(ticker_input)
                 df_price = cached_price_history(ticker_input)
-            except SystemExit:
-                st.error(f"Ticker '{ticker_input}' no encontrado. Verifica el símbolo.")
+            except (SystemExit, ValueError) as e:
+                if "not found" in str(e).lower() or isinstance(e, SystemExit):
+                    st.error(f"Ticker '{ticker_input}' no encontrado. Verifica el símbolo.")
+                else:
+                    st.error(f"Error en análisis: {e}")
                 st.stop()
             except _RateLimitError:
                 st.warning(
@@ -2568,49 +2571,52 @@ with tab2:
                     st.error(f"Error en análisis: {e}")
                 st.stop()
 
-        render_header(ticker_input, data["overview"], data["decision"])
-        render_extended_hours(data["overview"], data["decision"].get("current_price", 0))
-        st.divider()
+        try:
+            render_header(ticker_input, data["overview"], data["decision"])
+            render_extended_hours(data["overview"], data["decision"].get("current_price", 0))
+            st.divider()
 
-        desc = data["overview"].get("description", "")
-        if desc and desc != "No description available.":
-            with st.expander("Descripción de la empresa", expanded=False):
-                st.write(desc)
+            desc = data["overview"].get("description", "")
+            if desc and desc != "No description available.":
+                with st.expander("Descripción de la empresa", expanded=False):
+                    st.write(desc)
 
-        if not df_price.empty:
-            st.plotly_chart(build_chart(df_price, data["technicals"]), width='stretch')
-        else:
-            st.warning("Historial de precios no disponible.")
+            if not df_price.empty:
+                st.plotly_chart(build_chart(df_price, data["technicals"]), width='stretch')
+            else:
+                st.warning("Historial de precios no disponible.")
 
-        st.divider()
-        st.subheader("Scores por Módulo")
-        render_score_explanation()
-        render_score_cards(data)
-        st.divider()
+            st.divider()
+            st.subheader("Scores por Módulo")
+            render_score_explanation()
+            render_score_cards(data)
+            st.divider()
 
-        col_tech, col_news = st.columns([1, 1])
-        with col_tech:
-            st.subheader("Indicadores Técnicos")
-            render_technicals_table(data["technicals"])
-        with col_news:
-            st.subheader("Noticias y Sentimiento")
-            render_news(data["news"])
+            col_tech, col_news = st.columns([1, 1])
+            with col_tech:
+                st.subheader("Indicadores Técnicos")
+                render_technicals_table(data["technicals"])
+            with col_news:
+                st.subheader("Noticias y Sentimiento")
+                render_news(data["news"])
 
-        st.divider()
-        st.subheader("Riesgo y Oportunidad")
-        render_risk_opportunity(data["risks"], data["opportunities"])
-        st.divider()
+            st.divider()
+            st.subheader("Riesgo y Oportunidad")
+            render_risk_opportunity(data["risks"], data["opportunities"])
+            st.divider()
 
-        st.subheader("Veredicto Final")
-        render_verdict(data["decision"])
-        st.divider()
-        macro_data = cached_macro_context(ticker_input)
-        render_macro_context(macro_data)
+            st.subheader("Veredicto Final")
+            render_verdict(data["decision"])
+            st.divider()
+            macro_data = cached_macro_context(ticker_input)
+            render_macro_context(macro_data)
 
-        key_events = data["decision"].get("key_events", [])
-        if key_events:
-            st.markdown("**Eventos detectados:** " +
-                        "  ".join(f"`{e}`" for e in key_events))
+            key_events = data["decision"].get("key_events", [])
+            if key_events:
+                st.markdown("**Eventos detectados:** " +
+                            "  ".join(f"`{e}`" for e in key_events))
+        except Exception as _render_err:
+            st.error(f"Error al mostrar resultados: {_render_err}")
 
         st.divider()
         st.caption(
