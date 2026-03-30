@@ -514,20 +514,19 @@ class _RateLimitError(Exception):
 
 def _run_safe(fn, *args, **kwargs):
     """Run a yfinance fetch; convert rate-limit errors to _RateLimitError."""
-    import time
     try:
-        time.sleep(0.6)   # small spacing between calls
         return fn(*args, **kwargs)
     except Exception as e:
         msg = str(e).lower()
-        if "too many" in msg or "rate" in msg or "429" in msg or "limited" in msg:
+        is_rate = "too many" in msg or "rate" in msg or "429" in msg or "limited" in msg
+        if not is_rate:
+            try:
+                from yfinance.exceptions import YFRateLimitError
+                is_rate = isinstance(e, YFRateLimitError)
+            except ImportError:
+                pass
+        if is_rate:
             raise _RateLimitError(str(e))
-        try:
-            from yfinance.exceptions import YFRateLimitError
-            if isinstance(e, YFRateLimitError):
-                raise _RateLimitError(str(e))
-        except ImportError:
-            pass
         raise
 
 
@@ -721,31 +720,70 @@ def render_header(ticker, overview, decision):
         )
 
 
-def render_extended_hours(ticker: str, current_price: float):
-    """Show pre/post market prices. Always renders a row with available data."""
+def _fetch_extended_hours(ticker: str):
+    """
+    Fetch pre/post market prices.
+    Primary  : t.info camelCase keys (preMarketPrice / postMarketPrice).
+    Fallback : history(prepost=True) — parse last pre/post candles.
+    Returns  : (pre, post, prev_close)  — any may be None.
+    """
+    import datetime as _dt
+    pre = post = prev_close = None
     try:
         t = yf.Ticker(ticker)
         fi = t.fast_info
-        pre  = getattr(fi, "pre_market_price",  None)
-        post = getattr(fi, "post_market_price", None)
-        prev_close = getattr(fi, "previous_close", None) or getattr(fi, "regular_market_previous_close", None)
+        prev_close = (getattr(fi, "previous_close", None)
+                      or getattr(fi, "regular_market_previous_close", None))
 
+        # Primary: full info dict has preMarketPrice / postMarketPrice
+        try:
+            info = t.info
+            pre  = info.get("preMarketPrice") or info.get("pre_market_price")
+            post = info.get("postMarketPrice") or info.get("post_market_price")
+        except Exception:
+            pass
+
+        # Fallback: 1-min history with extended hours
+        if not pre and not post:
+            try:
+                import pytz
+                et = pytz.timezone("America/New_York")
+                hist = t.history(period="1d", interval="1m", prepost=True)
+                if not hist.empty:
+                    hist.index = hist.index.tz_convert(et)
+                    pre_rows  = hist[hist.index.time < _dt.time(9, 30)]
+                    post_rows = hist[hist.index.time >= _dt.time(16, 0)]
+                    if not pre_rows.empty:
+                        pre = float(pre_rows["Close"].iloc[-1])
+                    if not post_rows.empty:
+                        post = float(post_rows["Close"].iloc[-1])
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return pre, post, prev_close
+
+
+def render_extended_hours(ticker: str, current_price: float):
+    """Show pre/post market and previous close. Always renders 3 metrics."""
+    try:
+        pre, post, prev_close = _fetch_extended_hours(ticker)
+        ref = current_price or 1
         items = []
+
         if pre and pre > 0:
-            chg = (pre - current_price) / current_price * 100 if current_price else 0
-            items.append(("🌅 Pre-market", f"${pre:,.2f}", f"{chg:+.2f}%"))
+            items.append(("🌅 Pre-market", f"${pre:,.2f}", f"{(pre-ref)/ref*100:+.2f}%"))
         else:
-            items.append(("🌅 Pre-market", "No disponible", "Mercado cerrado"))
+            items.append(("🌅 Pre-market", "—", "Sin datos"))
 
         if post and post > 0:
-            chg = (post - current_price) / current_price * 100 if current_price else 0
-            items.append(("🌙 Post-market", f"${post:,.2f}", f"{chg:+.2f}%"))
+            items.append(("🌙 Post-market", f"${post:,.2f}", f"{(post-ref)/ref*100:+.2f}%"))
         else:
-            items.append(("🌙 Post-market", "No disponible", "Mercado cerrado"))
+            items.append(("🌙 Post-market", "—", "Sin datos"))
 
         if prev_close and prev_close > 0:
-            chg = (current_price - prev_close) / prev_close * 100 if current_price else 0
-            items.append(("📅 Cierre anterior", f"${prev_close:,.2f}", f"{chg:+.2f}% hoy"))
+            items.append(("📅 Cierre anterior", f"${prev_close:,.2f}",
+                          f"{(ref-prev_close)/prev_close*100:+.2f}% hoy"))
 
         cols = st.columns(len(items))
         for col, (label, val, delta) in zip(cols, items):
