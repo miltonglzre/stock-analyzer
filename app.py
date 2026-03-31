@@ -25,7 +25,7 @@ from plotly.subplots import make_subplots
 import pandas as pd
 import sqlite3
 import yfinance as yf
-from datetime import datetime
+from datetime import datetime, date
 
 from utils import db_path, load_weights, tmp_path, load_json
 from market_hours import get_market_status
@@ -1030,90 +1030,388 @@ def render_verdict(decision):
 
 # ── Tab 2: My Trades ───────────────────────────────────────────────────────────
 
+def _portfolio_db_op(sql: str, params: tuple = ()):
+    """Execute a write operation on the trades DB."""
+    db = db_path()
+    if not db.exists():
+        return
+    conn = sqlite3.connect(db)
+    try:
+        conn.execute(sql, params)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _load_my_trades() -> "pd.DataFrame":
+    """Load only real (non-paper) trades."""
+    db = db_path()
+    if not db.exists():
+        return pd.DataFrame()
+    conn = sqlite3.connect(db)
+    try:
+        return pd.read_sql_query(
+            "SELECT id, ticker, entry_date, entry_price, exit_date, exit_price, "
+            "pnl_pct, outcome, recommendation, confidence_pct, verdict, notes "
+            "FROM trades WHERE is_paper=0 ORDER BY entry_date DESC",
+            conn,
+        )
+    finally:
+        conn.close()
+
+
 def render_trades_tab():
-    st.header("Mis Operaciones")
-    st.caption(
-        "Registra operaciones vía CLI: `python tools/record_trade.py TICKER PRICE Buy`  "
-        "y cierra con: `python tools/record_outcome.py TRADE_ID EXIT_PRICE`"
-    )
-    st.info(
-        "SQLite es efímero en Streamlit Community Cloud — el historial de operaciones se reinicia "
-        "con cada nuevo despliegue. Para persistencia, ejecuta la app localmente.",
-        icon="ℹ",
-    )
+    # ── Header ─────────────────────────────────────────────────────────────────
+    col_title, col_add = st.columns([4, 1])
+    with col_title:
+        st.markdown(
+            "<div style='font-size:1.6rem;font-weight:900;color:#ccd6f6;margin-bottom:2px;'>"
+            "💼 Mis Picks</div>"
+            "<div style='font-size:0.78rem;color:#4a5580;'>Tu portafolio personal — "
+            "registra entradas, cierra posiciones y sigue tu P&L</div>",
+            unsafe_allow_html=True,
+        )
 
     db = db_path()
     if not db.exists():
         st.warning("Base de datos no inicializada. Analiza una acción primero.")
         return
 
-    conn = sqlite3.connect(db)
-    try:
-        trades_df = pd.read_sql_query(
-            "SELECT id, ticker, entry_date, entry_price, exit_date, exit_price, "
-            "pnl_pct, outcome, recommendation, confidence_pct, verdict, notes "
-            "FROM trades ORDER BY entry_date DESC",
-            conn
-        )
-    finally:
-        conn.close()
+    # ── Add new position form ──────────────────────────────────────────────────
+    with col_add:
+        if st.button("＋ Nueva posición", use_container_width=True, type="primary"):
+            st.session_state["show_add_form"] = not st.session_state.get("show_add_form", False)
 
-    if trades_df.empty:
-        st.info("Aún no hay operaciones registradas.")
+    if st.session_state.get("show_add_form", False):
+        with st.form("add_position_form", clear_on_submit=True):
+            st.markdown("**Registrar nueva posición**")
+            fc1, fc2, fc3, fc4 = st.columns([2, 2, 2, 2])
+            new_ticker  = fc1.text_input("Ticker", placeholder="AAPL").upper().strip()
+            new_entry   = fc2.number_input("Precio entrada $", min_value=0.01, format="%.2f")
+            new_shares  = fc3.number_input("Acciones (opcional)", min_value=0.0, format="%.4f", value=0.0)
+            new_rec     = fc4.selectbox("Dirección", ["Buy", "Sell"])
+            new_notes   = st.text_input("Notas (opcional)", placeholder="Razón de entrada, catalizador...")
+            submitted   = st.form_submit_button("Registrar", type="primary")
+            if submitted and new_ticker and new_entry > 0:
+                notes_full = f"shares={new_shares} " + new_notes if new_shares > 0 else new_notes
+                _portfolio_db_op(
+                    "INSERT INTO trades (ticker, entry_date, entry_price, recommendation, "
+                    "confidence_pct, verdict, notes, is_paper, trade_type) VALUES (?,?,?,?,?,?,?,0,'regular')",
+                    (new_ticker, date.today().isoformat(), new_entry, new_rec, 0, "Manual", notes_full),
+                )
+                st.session_state["show_add_form"] = False
+                st.success(f"✓ {new_ticker} registrado")
+                st.rerun()
+
+    # ── Handle close-position modal ────────────────────────────────────────────
+    closing_id = st.session_state.get("closing_trade_id")
+    if closing_id:
+        with st.form("close_position_form"):
+            st.markdown(f"**Cerrar posición #{closing_id}**")
+            exit_p = st.number_input("Precio de venta $", min_value=0.01, format="%.2f")
+            cc1, cc2 = st.columns(2)
+            if cc1.form_submit_button("Confirmar cierre", type="primary"):
+                conn2 = sqlite3.connect(db)
+                try:
+                    row = conn2.execute(
+                        "SELECT entry_price, recommendation FROM trades WHERE id=?", (closing_id,)
+                    ).fetchone()
+                    if row:
+                        ep, rec = row
+                        pnl = ((exit_p - ep) / ep * 100) if rec == "Buy" else ((ep - exit_p) / ep * 100)
+                        outcome = "win" if pnl >= 5 else ("loss" if pnl <= -3 else "neutral")
+                        conn2.execute(
+                            "UPDATE trades SET exit_date=?, exit_price=?, pnl_pct=?, outcome=? WHERE id=?",
+                            (date.today().isoformat(), exit_p, round(pnl, 2), outcome, closing_id),
+                        )
+                        conn2.commit()
+                finally:
+                    conn2.close()
+                del st.session_state["closing_trade_id"]
+                st.rerun()
+            if cc2.form_submit_button("Cancelar"):
+                del st.session_state["closing_trade_id"]
+                st.rerun()
+
+    # ── Handle delete confirmation ─────────────────────────────────────────────
+    deleting_id = st.session_state.get("deleting_trade_id")
+    if deleting_id:
+        st.warning(f"¿Eliminar entrada #{deleting_id}? Esta acción no se puede deshacer.")
+        dc1, dc2 = st.columns([1, 4])
+        if dc1.button("Sí, eliminar", type="primary", key="confirm_del"):
+            _portfolio_db_op("DELETE FROM trades WHERE id=? AND is_paper=0", (deleting_id,))
+            del st.session_state["deleting_trade_id"]
+            st.rerun()
+        if dc2.button("Cancelar", key="cancel_del"):
+            del st.session_state["deleting_trade_id"]
+            st.rerun()
+
+    # ── Load trades ────────────────────────────────────────────────────────────
+    df = _load_my_trades()
+
+    if df.empty:
+        st.info("Aún no tienes posiciones registradas. Usa '＋ Nueva posición' para agregar la primera.")
+        _render_learning_progress_mini()
         return
 
-    closed = trades_df[trades_df["outcome"].notna()]
-    wins   = (closed["outcome"] == "win").sum()
-    losses = (closed["outcome"] == "loss").sum()
-    wr     = (wins / len(closed) * 100) if len(closed) > 0 else 0
-    avg_pnl= closed["pnl_pct"].mean() if not closed.empty else 0
+    open_df   = df[df["exit_date"].isna()].copy()
+    closed_df = df[df["exit_date"].notna()].copy()
 
-    m1, m2, m3, m4, m5 = st.columns(5)
-    m1.metric("Total Operaciones", len(trades_df))
-    m2.metric("Cerradas",          len(closed))
-    m3.metric("Victorias",         int(wins))
-    m4.metric("% Victorias",       f"{wr:.1f}%")
-    m5.metric("P&L Promedio",      f"{avg_pnl:.2f}%")
+    # ── Portfolio summary bar (Robinhood-style) ────────────────────────────────
+    total_invested   = open_df["entry_price"].sum() if not open_df.empty else 0
+    realized_pnl_avg = closed_df["pnl_pct"].mean() if not closed_df.empty else 0
+    wins  = (closed_df["outcome"] == "win").sum()  if not closed_df.empty else 0
+    total_closed_c   = len(closed_df)
+    wr    = round(wins / total_closed_c * 100) if total_closed_c > 0 else 0
 
-    if not closed.empty:
-        # P&L bar chart
-        fig = go.Figure(go.Bar(
-            x=closed["ticker"] + " #" + closed["id"].astype(str),
-            y=closed["pnl_pct"],
-            marker_color=["#00d4aa" if v >= 0 else "#ef5350" for v in closed["pnl_pct"]],
-            text=[f"{v:.1f}%" for v in closed["pnl_pct"]],
-            textposition="outside",
-        ))
-        fig.add_hline(y=0, line_color="white", line_width=1)
-        fig.update_layout(
-            template="plotly_dark",
-            height=250,
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(14,17,23,0.95)",
-            yaxis_title="P&L %",
-            showlegend=False,
-            margin=dict(l=10, r=10, t=10, b=40),
+    s1, s2, s3, s4, s5 = st.columns(5)
+    def _stat_card(col, label, value, sub="", color="#ccd6f6"):
+        col.markdown(
+            f"<div style='background:#0d1428;border:1px solid #1a2040;border-radius:12px;padding:14px;'>"
+            f"<div style='font-size:0.62rem;color:#4a5580;text-transform:uppercase;letter-spacing:0.7px;'>{label}</div>"
+            f"<div style='font-size:1.5rem;font-weight:900;color:{color};margin:4px 0 2px;'>{value}</div>"
+            f"<div style='font-size:0.7rem;color:#6b7399;'>{sub}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
         )
-        st.plotly_chart(fig, width='stretch')
+    _stat_card(s1, "Posiciones abiertas", len(open_df), f"de {len(df)} totales")
+    _stat_card(s2, "Cerradas", total_closed_c, f"{wins} ganancias · {total_closed_c - wins} pérdidas")
+    _stat_card(s3, "Win rate", f"{wr}%", "picks cerrados",
+               color="#00d4aa" if wr >= 50 else "#ef5350")
+    _stat_card(s4, "P&L prom. realizado", f"{realized_pnl_avg:+.2f}%", "picks cerrados",
+               color="#00d4aa" if realized_pnl_avg >= 0 else "#ef5350")
+    _stat_card(s5, "Capital expuesto", f"${total_invested:,.2f}", "suma de entradas abiertas")
 
-    st.dataframe(
-        trades_df,
-        hide_index=True,
-        use_container_width=True,
-        column_config={
-            "id":            st.column_config.NumberColumn("ID",          help="ID de operación — usa este número con record_outcome.py para cerrarla"),
-            "ticker":        st.column_config.TextColumn(  "Ticker",      help="Símbolo de la acción"),
-            "entry_date":    st.column_config.TextColumn(  "Fecha Entrada", help="Fecha y hora en que entraste a la posición"),
-            "entry_price":   st.column_config.NumberColumn("Entrada $",   format="$%.2f", help="Precio al que compraste/vendiste corto"),
-            "exit_date":     st.column_config.TextColumn(  "Fecha Salida", help="Fecha en que se cerró la posición (vacío si sigue abierta)"),
-            "exit_price":    st.column_config.NumberColumn("Salida $",    format="$%.2f", help="Precio al que cerraste la posición"),
-            "pnl_pct":       st.column_config.NumberColumn("P&L %",       format="%.2f%%",help="Ganancia o pérdida porcentual: (salida - entrada) / entrada × 100"),
-            "outcome":       st.column_config.TextColumn(  "Resultado",   help="win = P&L > +5% | loss = P&L < -5% | neutral = intermedio"),
-            "recommendation":st.column_config.TextColumn(  "Rec Algo",    help="Lo que el algoritmo recomendó cuando entraste"),
-            "confidence_pct":st.column_config.NumberColumn("Confianza",   format="%d%%",  help="Confianza del algoritmo al momento de la recomendación"),
-            "verdict":       st.column_config.TextColumn(  "Veredicto",   help="Alcista / Bajista / Neutral — sesgo general del mercado al entrar"),
-        }
-    )
+    st.markdown("<div style='margin-top:18px;'></div>", unsafe_allow_html=True)
+
+    # ── Sub-tabs: Abiertas / Cerradas ──────────────────────────────────────────
+    ptab_open, ptab_closed = st.tabs([
+        f"📂 Abiertas ({len(open_df)})",
+        f"✅ Cerradas ({total_closed_c})",
+    ])
+
+    # ── OPEN POSITIONS ─────────────────────────────────────────────────────────
+    with ptab_open:
+        if open_df.empty:
+            st.info("No tienes posiciones abiertas. Agrega una con '＋ Nueva posición'.")
+        else:
+            for _, row in open_df.iterrows():
+                tid      = int(row["id"])
+                rec      = row["recommendation"]
+                rec_col  = "#00d4aa" if rec == "Buy" else "#ef5350"
+                rec_es   = "COMPRA" if rec == "Buy" else "VENTA CORTA"
+                notes    = str(row.get("notes", "") or "")
+                shares   = 0.0
+                for part in notes.split():
+                    if part.startswith("shares="):
+                        try: shares = float(part.split("=")[1])
+                        except: pass
+
+                with st.container():
+                    card_l, card_r = st.columns([5, 2])
+                    with card_l:
+                        st.markdown(
+                            f"<div style='background:#0d1428;border:1px solid {rec_col}33;"
+                            f"border-left:4px solid {rec_col};border-radius:12px;padding:16px;'>"
+                            f"<div style='display:flex;align-items:center;gap:12px;margin-bottom:10px;'>"
+                            f"<span style='font-size:1.6rem;font-weight:900;color:#ccd6f6;'>{row['ticker']}</span>"
+                            f"<span style='background:{rec_col}22;border:1px solid {rec_col}55;color:{rec_col};"
+                            f"font-size:0.7rem;font-weight:700;border-radius:6px;padding:2px 8px;'>{rec_es}</span>"
+                            f"<span style='font-size:0.72rem;color:#4a5580;'>desde {row['entry_date']}</span>"
+                            f"</div>"
+                            f"<div style='display:flex;gap:28px;'>"
+                            f"<div><div style='font-size:0.62rem;color:#4a5580;text-transform:uppercase;'>Precio entrada</div>"
+                            f"<div style='font-size:1.1rem;font-weight:700;color:#ccd6f6;'>${row['entry_price']:.2f}</div></div>"
+                            + (f"<div><div style='font-size:0.62rem;color:#4a5580;text-transform:uppercase;'>Acciones</div>"
+                               f"<div style='font-size:1.1rem;font-weight:700;color:#ccd6f6;'>{shares:.2f}</div></div>"
+                               if shares > 0 else "")
+                            + (f"<div><div style='font-size:0.62rem;color:#4a5580;text-transform:uppercase;'>Valor total</div>"
+                               f"<div style='font-size:1.1rem;font-weight:700;color:#ccd6f6;'>${shares * row['entry_price']:,.2f}</div></div>"
+                               if shares > 0 else "")
+                            + f"<div><div style='font-size:0.62rem;color:#4a5580;text-transform:uppercase;'>Confianza algo</div>"
+                            f"<div style='font-size:1.1rem;font-weight:700;color:#4f9cf9;'>{int(row.get('confidence_pct') or 0)}%</div></div>"
+                            f"</div>"
+                            + (f"<div style='margin-top:8px;font-size:0.72rem;color:#4a5580;'>📝 {notes}</div>"
+                               if notes and not notes.startswith("shares=") else "")
+                            + f"</div>",
+                            unsafe_allow_html=True,
+                        )
+                    with card_r:
+                        st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+                        if st.button("💰 Cerrar posición", key=f"close_{tid}", use_container_width=True):
+                            st.session_state["closing_trade_id"] = tid
+                            st.rerun()
+                        if st.button("🗑 Eliminar entrada", key=f"del_{tid}", use_container_width=True):
+                            st.session_state["deleting_trade_id"] = tid
+                            st.rerun()
+                st.markdown("<div style='margin-bottom:8px'></div>", unsafe_allow_html=True)
+
+    # ── CLOSED POSITIONS ───────────────────────────────────────────────────────
+    with ptab_closed:
+        if closed_df.empty:
+            st.info("Aún no has cerrado ninguna posición.")
+        else:
+            # P&L bar chart
+            closed_sorted = closed_df.sort_values("exit_date")
+            fig = go.Figure(go.Bar(
+                x=closed_sorted["ticker"] + " #" + closed_sorted["id"].astype(str),
+                y=closed_sorted["pnl_pct"].fillna(0),
+                marker_color=["#00d4aa" if v >= 0 else "#ef5350"
+                              for v in closed_sorted["pnl_pct"].fillna(0)],
+                text=[f"{v:+.1f}%" for v in closed_sorted["pnl_pct"].fillna(0)],
+                textposition="outside",
+                hovertemplate="<b>%{x}</b><br>P&L: %{y:+.2f}%<extra></extra>",
+            ))
+            fig.add_hline(y=0, line_color="rgba(255,255,255,0.2)", line_width=1)
+            fig.update_layout(
+                template="plotly_dark", height=220,
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(14,17,23,0.95)",
+                yaxis_title="P&L %", showlegend=False,
+                margin=dict(l=10, r=10, t=10, b=40),
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Closed positions table with delete button
+            st.markdown("#### Historial de posiciones cerradas")
+            for _, row in closed_df.iterrows():
+                tid     = int(row["id"])
+                pnl     = row.get("pnl_pct") or 0
+                pnl_col = "#00d4aa" if pnl >= 0 else "#ef5350"
+                outcome = row.get("outcome") or "neutral"
+                icon    = "✓" if outcome == "win" else ("✗" if outcome == "loss" else "○")
+
+                r1, r2 = st.columns([6, 1])
+                with r1:
+                    st.markdown(
+                        f"<div style='background:#0d1428;border:1px solid #1a2040;"
+                        f"border-radius:10px;padding:12px 16px;display:flex;"
+                        f"justify-content:space-between;align-items:center;'>"
+                        f"<div style='display:flex;gap:16px;align-items:center;'>"
+                        f"<span style='color:{pnl_col};font-size:1.1rem;font-weight:700;'>{icon}</span>"
+                        f"<span style='font-size:1.1rem;font-weight:800;color:#ccd6f6;'>{row['ticker']}</span>"
+                        f"<span style='font-size:0.75rem;color:#4a5580;'>"
+                        f"{row.get('recommendation','?')} · entrada ${row['entry_price']:.2f} → "
+                        f"salida ${row['exit_price']:.2f}</span>"
+                        f"</div>"
+                        f"<div style='text-align:right;'>"
+                        f"<div style='font-size:1.2rem;font-weight:900;color:{pnl_col};'>{pnl:+.2f}%</div>"
+                        f"<div style='font-size:0.68rem;color:#4a5580;'>{row.get('exit_date','')}</div>"
+                        f"</div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                with r2:
+                    if st.button("🗑", key=f"del_c_{tid}", help="Eliminar este registro",
+                                 use_container_width=True):
+                        st.session_state["deleting_trade_id"] = tid
+                        st.rerun()
+                st.markdown("<div style='margin-bottom:4px'></div>", unsafe_allow_html=True)
+
+    # ── Learning progress mini-panel ───────────────────────────────────────────
+    st.markdown("<div style='margin-top:24px'></div>", unsafe_allow_html=True)
+    _render_learning_progress_mini()
+
+
+def _render_learning_progress_mini():
+    """Compact learning progress panel shown at the bottom of Mis Picks."""
+    with st.expander("📈 Progreso del sistema de aprendizaje", expanded=False):
+        try:
+            import sqlite3 as _sq
+            from utils import db_path as _dp, weights_path as _wp
+            from pathlib import Path as _P
+            import json as _json
+
+            _db = _dp()
+            if not _db.exists():
+                st.info("Sin datos de aprendizaje todavía.")
+                return
+
+            _conn = _sq.connect(_db)
+            _reg  = _conn.execute(
+                "SELECT COUNT(*) as n, SUM(outcome='win') as w FROM trades "
+                "WHERE is_paper=1 AND outcome IS NOT NULL AND trade_type='regular'"
+            ).fetchone()
+            _vol  = _conn.execute(
+                "SELECT COUNT(*) as n, SUM(outcome='win') as w FROM trades "
+                "WHERE is_paper=1 AND outcome IS NOT NULL AND trade_type='volatile'"
+            ).fetchone()
+            _conn.close()
+
+            _reg_n, _reg_w = (_reg[0] or 0), (_reg[1] or 0)
+            _vol_n, _vol_w = (_vol[0] or 0), (_vol[1] or 0)
+            _reg_wr = round(_reg_w / _reg_n * 100) if _reg_n else 0
+            _vol_wr = round(_vol_w / _vol_n * 100) if _vol_n else 0
+
+            _w_data, _vw_data = {}, {}
+            if _wp().exists():
+                _w_data = _json.loads(_wp().read_text())
+            _vw_path = _dp().parent / "volatile_weights.json"
+            if _vw_path.exists():
+                _vw_data = _json.loads(_vw_path.read_text())
+
+            _last_reg = _w_data.get("last_updated", "Sin iteraciones")
+            _last_vol = _vw_data.get("last_updated", "Sin iteraciones")
+
+            lc1, lc2 = st.columns(2)
+            with lc1:
+                _rwr_col = "#00d4aa" if _reg_wr >= 50 else "#f5a623" if _reg_wr >= 40 else "#ef5350"
+                st.markdown(
+                    f"<div style='background:#0d1428;border:1px solid #1a2040;border-radius:12px;padding:16px;'>"
+                    f"<div style='font-size:0.65rem;color:#4f9cf9;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px;'>📈 Modelo Multi-día (10d)</div>"
+                    f"<div style='font-size:2rem;font-weight:900;color:{_rwr_col};'>{_reg_wr}%"
+                    f"<span style='font-size:0.9rem;color:#4a5580;font-weight:400;'> win rate</span></div>"
+                    f"<div style='font-size:0.78rem;color:#6b7399;margin-top:4px;'>"
+                    f"{int(_reg_w)} ganancias · {_reg_n - int(_reg_w)} pérdidas · {_reg_n} iteraciones</div>"
+                    f"<div style='margin-top:10px;background:#1a2040;border-radius:6px;height:6px;'>"
+                    f"<div style='background:{_rwr_col};width:{min(_reg_wr,100)}%;height:6px;border-radius:6px;'></div></div>"
+                    f"<div style='font-size:0.65rem;color:#4a5580;margin-top:6px;'>Última iter: {_last_reg}</div>"
+                    f"<div style='font-size:0.7rem;color:#4a5580;margin-top:4px;'>Ver pesos detallados → tab 🧠 Aprendizaje</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+            with lc2:
+                _vwr_col = "#00d4aa" if _vol_wr >= 50 else "#f5a623" if _vol_wr >= 40 else "#ef5350"
+                st.markdown(
+                    f"<div style='background:#0d1428;border:1px solid #f5a62333;border-radius:12px;padding:16px;'>"
+                    f"<div style='font-size:0.65rem;color:#f5a623;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px;'>⚡ Modelo Volátil (3d)</div>"
+                    f"<div style='font-size:2rem;font-weight:900;color:{_vwr_col};'>{_vol_wr}%"
+                    f"<span style='font-size:0.9rem;color:#4a5580;font-weight:400;'> win rate</span></div>"
+                    f"<div style='font-size:0.78rem;color:#6b7399;margin-top:4px;'>"
+                    f"{int(_vol_w)} ganancias · {_vol_n - int(_vol_w)} pérdidas · {_vol_n} iteraciones</div>"
+                    f"<div style='margin-top:10px;background:#1a2040;border-radius:6px;height:6px;'>"
+                    f"<div style='background:{_vwr_col};width:{min(_vol_wr,100)}%;height:6px;border-radius:6px;'></div></div>"
+                    f"<div style='font-size:0.65rem;color:#4a5580;margin-top:6px;'>Última iter: {_last_vol}</div>"
+                    f"<div style='font-size:0.7rem;color:#4a5580;margin-top:4px;'>Itera cada vez que cierra un pick volátil</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+            # Top signals
+            if _w_data:
+                _weights_clean = {k: v for k, v in _w_data.items()
+                                  if k not in ("last_updated",) and isinstance(v, (int, float))}
+                if _weights_clean:
+                    _sorted = sorted(_weights_clean.items(), key=lambda x: -x[1])
+                    st.markdown(
+                        "<div style='margin-top:14px;font-size:0.65rem;color:#4a5580;"
+                        "text-transform:uppercase;letter-spacing:0.7px;margin-bottom:6px;'>"
+                        "Señales más confiables (mayor peso)</div>",
+                        unsafe_allow_html=True,
+                    )
+                    _sig_cols = st.columns(min(len(_sorted), 4))
+                    for _sc, (_sig, _w) in zip(_sig_cols, _sorted[:4]):
+                        _wc = "#00d4aa" if _w > 1.1 else "#f5a623" if _w > 0.9 else "#ef5350"
+                        _sc.markdown(
+                            f"<div style='background:#0d1428;border:1px solid #1a2040;"
+                            f"border-radius:8px;padding:8px;text-align:center;'>"
+                            f"<div style='font-size:0.6rem;color:#4a5580;'>{_sig.replace('_',' ')}</div>"
+                            f"<div style='font-size:1.1rem;font-weight:800;color:{_wc};'>{_w:.2f}</div>"
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
+        except Exception:
+            st.info("Sin datos de aprendizaje todavía. El sistema itera automáticamente.")
 
 
 # ── Tab 3: Learning System ─────────────────────────────────────────────────────
@@ -1243,7 +1541,7 @@ def render_learning_tab():
 # ── Main layout ────────────────────────────────────────────────────────────────
 
 tab0, tab1, tab2, tab3, tab4 = st.tabs(
-    ["🏠 Inicio", "🔍 Escáner", "📊 Análisis", "💼 Operaciones", "🧠 Aprendizaje"]
+    ["🏠 Inicio", "🔍 Escáner", "📊 Análisis", "💼 Mis Picks", "🧠 Aprendizaje"]
 )
 
 # ── Tab 1: Market Scanner ─────────────────────────────────────────────────────
