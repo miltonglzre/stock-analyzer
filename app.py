@@ -1151,7 +1151,6 @@ def render_trades_tab():
 
     if df.empty:
         st.info("Aún no tienes posiciones registradas. Usa '＋ Nueva posición' para agregar la primera.")
-        _render_learning_progress_mini()
         return
 
     open_df   = df[df["exit_date"].isna()].copy()
@@ -1308,14 +1307,11 @@ def render_trades_tab():
                         st.rerun()
                 st.markdown("<div style='margin-bottom:4px'></div>", unsafe_allow_html=True)
 
-    # ── Learning progress mini-panel ───────────────────────────────────────────
-    st.markdown("<div style='margin-top:24px'></div>", unsafe_allow_html=True)
-    _render_learning_progress_mini()
 
 
-def _render_learning_progress_mini():
-    """Compact learning progress panel shown at the bottom of Mis Picks."""
-    with st.expander("📈 Progreso del sistema de aprendizaje", expanded=False):
+def _render_learning_progress_mini(expanded: bool = False):
+    """Learning progress panel — shown in the Aprendizaje tab."""
+    with st.expander("📈 Progreso del sistema de aprendizaje", expanded=expanded):
         try:
             import sqlite3 as _sq
             from utils import db_path as _dp, weights_path as _wp
@@ -1417,11 +1413,15 @@ def _render_learning_progress_mini():
 # ── Tab 3: Learning System ─────────────────────────────────────────────────────
 
 def render_learning_tab():
-    st.header("Sistema de Aprendizaje — Pesos de Señales")
-    st.caption(
-        "Tras cerrar operaciones con `record_outcome.py`, ejecuta `python tools/analyze_errors.py` "
-        "y `python tools/adjust_weights.py` para actualizar los pesos."
+    st.markdown(
+        "<div style='font-size:1.6rem;font-weight:900;color:#ccd6f6;margin-bottom:2px;'>"
+        "🧠 Sistema de Aprendizaje</div>",
+        unsafe_allow_html=True,
     )
+
+    # ── Learning progress summary (moved from Mis Picks) ──────────────────────
+    _render_learning_progress_mini(expanded=True)
+    st.divider()
 
     weights = load_weights()
     weights_clean = {k: v for k, v in weights.items() if k != "last_updated"}
