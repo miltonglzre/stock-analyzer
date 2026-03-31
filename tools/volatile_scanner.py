@@ -41,24 +41,39 @@ def _catalyst_score(volume_ratio: float, price_change_pct: float,
     """
     Composite catalyst score [0.0 – 1.0].
 
-    Weights:
-      Volume spike  35%  (3x=0.0 baseline, 10x=1.0)
-      Price move    35%  (3%=0.15, 20%=1.0)
-      News          30%  (|sentiment| × event multiplier)
-    Bonus: +0.15 squeeze setup if volume>=5x + green + was oversold
+    Weights loaded from volatile_weights.json (learned from trade outcomes):
+      Volume spike  w_volume  (3x=0.0 baseline, 10x=1.0)
+      Price move    w_price   (3%=0.15, 20%=1.0)
+      News          w_news    (|sentiment| × per-event learned multiplier)
+    Squeeze bonus: configurable threshold from weights file
     """
-    vol_component = min(1.0, max(0.0, (volume_ratio - 3.0) / 7.0))
+    try:
+        from volatile_learning import load_volatile_weights
+        w = load_volatile_weights()
+    except Exception:
+        w = {"w_volume": 0.35, "w_price": 0.35, "w_news": 0.30,
+             "squeeze_bonus": 0.15, "squeeze_vol_min": 5.0, "squeeze_rsi_max": 35.0}
+
+    vol_component   = min(1.0, max(0.0, (volume_ratio - 3.0) / 7.0))
     price_component = min(1.0, abs(price_change_pct) / 20.0)
 
-    event_multiplier = 1.5 if any(e in CATALYST_EVENTS for e in (events or [])) else 1.0
-    news_component = min(1.0, abs(sentiment_score) * event_multiplier)
+    # Use per-event learned multipliers; fall back to 1.5 for known events
+    event_mult = 1.0
+    for ev in (events or []):
+        key = f"mult_{ev}"
+        mult = w.get(key, 1.5 if ev in CATALYST_EVENTS else 1.0)
+        if mult > event_mult:
+            event_mult = mult
+    news_component = min(1.0, abs(sentiment_score) * event_mult)
 
-    score = vol_component * 0.35 + price_component * 0.35 + news_component * 0.30
+    score = (vol_component   * w["w_volume"]
+           + price_component * w["w_price"]
+           + news_component  * w["w_news"])
 
     # Squeeze bonus: high volume + green + was oversold
-    if (volume_ratio >= 5.0 and price_change_pct > 0
-            and rsi_2d_ago is not None and rsi_2d_ago < 35):
-        score += 0.15
+    if (volume_ratio >= w["squeeze_vol_min"] and price_change_pct > 0
+            and rsi_2d_ago is not None and rsi_2d_ago < w["squeeze_rsi_max"]):
+        score += w["squeeze_bonus"]
 
     return round(min(1.0, score), 4)
 

@@ -68,6 +68,9 @@ def auto_paper_trade(ticker: str, decision: dict,
             return None
 
         notes = f"target={target} stop={stop}"
+        volatile_meta = decision.get("_volatile_meta", "")
+        if volatile_meta:
+            notes += f" {volatile_meta}"
         cur = conn.execute(
             """INSERT INTO trades
                (ticker, entry_date, entry_price, recommendation,

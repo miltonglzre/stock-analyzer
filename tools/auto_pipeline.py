@@ -198,15 +198,24 @@ def run_autonomous_pipeline(
         results["errors"].append(f"close_trades: {e}")
         print(f"[WARN] close_paper_trades failed: {e}")
 
-    # ── Phase 0b: Learning cycle ───────────────────────────────────────────────
+    # ── Phase 0b: Learning cycles (regular + volatile) ────────────────────────
     try:
         from learning_cycle import run_learning_cycle
         lc = run_learning_cycle(eval_days=eval_days_regular, min_new_trades=3)
         results["learning_ran"] = lc.get("status") == "ok"
-        print(f"[Phase 0b] Learning cycle: {lc.get('status')}")
+        print(f"[Phase 0b] Regular learning cycle: {lc.get('status')}")
     except Exception as e:
         results["errors"].append(f"learning_cycle: {e}")
         print(f"[WARN] learning_cycle failed: {e}")
+
+    try:
+        from volatile_learning import run_volatile_learning_cycle
+        vlc = run_volatile_learning_cycle(min_samples=3)
+        results["volatile_learning_ran"] = vlc.get("status") == "ok"
+        print(f"[Phase 0b] Volatile learning cycle: {vlc.get('status')}")
+    except Exception as e:
+        results["errors"].append(f"volatile_learning_cycle: {e}")
+        print(f"[WARN] volatile_learning_cycle failed: {e}")
 
     # ── Phase 1: Regular scanner ───────────────────────────────────────────────
     regular_candidates = []
@@ -223,10 +232,14 @@ def run_autonomous_pipeline(
 
     # ── Phase 2: Volatile scanner ──────────────────────────────────────────────
     volatile_candidates = []
+    volatile_meta: dict[str, dict] = {}  # ticker → scanner metadata
     try:
         from volatile_scanner import scan_volatile_market
         vscan = scan_volatile_market(force=force_scan, top_n=top_n_volatile)
-        volatile_candidates = [o["ticker"] for o in vscan.get("opportunities", [])]
+        for opp in vscan.get("opportunities", []):
+            tk = opp["ticker"]
+            volatile_candidates.append(tk)
+            volatile_meta[tk] = opp
         print(f"[Phase 2] Volatile candidates: {volatile_candidates}")
     except Exception as e:
         results["errors"].append(f"volatile_scanner: {e}")
@@ -260,6 +273,15 @@ def run_autonomous_pipeline(
         try:
             decision = run_light_analysis(ticker)
             if decision:
+                # Attach catalyst metadata so volatile_learning can parse outcomes
+                meta = volatile_meta.get(ticker, {})
+                events_str = ",".join(meta.get("events", []))
+                decision["_volatile_meta"] = (
+                    f"events={events_str} "
+                    f"vol_ratio={meta.get('volume_ratio', '')} "
+                    f"price_chg={meta.get('change_pct', '')} "
+                    f"sector={meta.get('sector', 'Unknown')}"
+                )
                 pt_id = auto_paper_trade(ticker, decision, trade_type="volatile")
                 results["volatile_analyzed"].append({
                     "ticker": ticker,
