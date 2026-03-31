@@ -1564,6 +1564,15 @@ def render_daily_watchlist(picks: list, market_is_open: bool):
     )
 
 
+def _normalize_ohlcv(df: "pd.DataFrame") -> "pd.DataFrame":
+    """Flatten MultiIndex columns from yfinance batch downloads."""
+    if hasattr(df, "columns") and isinstance(df.columns, pd.MultiIndex):
+        # e.g. ("Close", "AAPL") → "Close"
+        df = df.copy()
+        df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
+    return df
+
+
 @st.cache_data(ttl=900, show_spinner=False)
 def _fetch_projection_data(tickers: tuple) -> dict:
     """Batch-download 3-month OHLCV for projection charts."""
@@ -1577,8 +1586,13 @@ def _fetch_projection_data(tickers: tuple) -> dict:
         out = {}
         for t in tickers:
             try:
-                hist = raw[t].dropna(how="all") if len(tickers) > 1 else raw
-                if hist is not None and len(hist) >= 10:
+                # Always extract per-ticker slice — avoids MultiIndex bleed-through
+                hist = raw[t].dropna(how="all") if t in raw.columns.get_level_values(0) or t in raw.columns.get_level_values(-1) else raw
+                hist = _normalize_ohlcv(hist)
+                if "Close" not in hist.columns:
+                    # Last resort: single-ticker download returned flat columns
+                    hist = _normalize_ohlcv(raw)
+                if hist is not None and len(hist) >= 10 and "Close" in hist.columns:
                     out[t] = hist
             except Exception:
                 pass
@@ -2506,8 +2520,11 @@ def render_scanner_tab():
         render_conviction_picks(conviction_picks, mkt_open, earnings_map)
         st.divider()
 
-        render_projections_section(conviction_picks)
-        st.divider()
+        try:
+            render_projections_section(conviction_picks)
+            st.divider()
+        except Exception:
+            pass
 
         # ── Daily Top 10 watchlist ─────────────────────────────────────────────
         generated_at = picks_data.get("generated_at", "")[:16].replace("T", " ")
@@ -2518,10 +2535,13 @@ def render_scanner_tab():
             f"Generado a las {generated_at} · Actualizado {last_upd} · "
             "Se actualiza cada 15 min · Aprende de victorias/pérdidas automáticamente"
         )
-        render_daily_watchlist(
-            picks_data.get("daily_top_10", []) + picks_data.get("closed_picks", []),
-            mkt_open,
-        )
+        try:
+            render_daily_watchlist(
+                picks_data.get("daily_top_10", []) + picks_data.get("closed_picks", []),
+                mkt_open,
+            )
+        except Exception as _wl_err:
+            st.warning(f"Error cargando watchlist: {_wl_err}")
 
         # Closed/auto-learned picks for today
         closed = picks_data.get("closed_picks", [])
