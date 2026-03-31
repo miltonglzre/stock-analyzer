@@ -40,14 +40,21 @@ def _fetch_price(ticker: str) -> float:
     return float(price)
 
 
-def close_paper_trades(eval_days: int = 10) -> list[dict]:
+def close_paper_trades(eval_days: int = 10,
+                       trade_type: str = "regular") -> list[dict]:
     """
-    Evaluate all open auto paper trades and close those that have resolved.
+    Evaluate all open auto paper trades of a given type and close resolved ones.
+    trade_type: 'regular' (10d, 3% thresholds) or 'volatile' (3d, 10% thresholds).
     Returns list of dicts describing each closed trade.
     """
-    win_pct  = get_float("WIN_THRESHOLD_PCT",  3.0)
-    loss_pct = get_float("LOSS_THRESHOLD_PCT", -3.0)
-    cutoff   = date.today() - timedelta(days=eval_days)
+    if trade_type == "volatile":
+        win_pct  = get_float("VOLATILE_WIN_THRESHOLD_PCT",   10.0)
+        loss_pct = get_float("VOLATILE_LOSS_THRESHOLD_PCT", -7.0)
+    else:
+        win_pct  = get_float("WIN_THRESHOLD_PCT",   3.0)
+        loss_pct = get_float("LOSS_THRESHOLD_PCT", -3.0)
+
+    cutoff = date.today() - timedelta(days=eval_days)
 
     db = db_path()
     if not db.exists():
@@ -58,8 +65,9 @@ def close_paper_trades(eval_days: int = 10) -> list[dict]:
         open_trades = conn.execute(
             """SELECT id, ticker, entry_date, entry_price, recommendation, notes
                FROM trades
-               WHERE exit_date IS NULL AND is_paper=1
-               ORDER BY entry_date"""
+               WHERE exit_date IS NULL AND is_paper=1 AND trade_type=?
+               ORDER BY entry_date""",
+            (trade_type,)
         ).fetchall()
     finally:
         conn.close()

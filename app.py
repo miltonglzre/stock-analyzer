@@ -76,6 +76,21 @@ def _check_password() -> bool:
 if not _check_password():
     st.stop()
 
+# ── Autonomous pipeline — lazy cron (runs in background thread every 4h) ───────
+def _launch_auto_pipeline():
+    """Spawn background thread to run the autonomous pipeline if it's due."""
+    try:
+        from auto_pipeline import is_pipeline_due, run_autonomous_pipeline
+        if not is_pipeline_due(interval_hours=4):
+            return
+        import threading
+        t = threading.Thread(target=run_autonomous_pipeline, daemon=True)
+        t.start()
+    except Exception:
+        pass  # Never crash the app due to pipeline issues
+
+_launch_auto_pipeline()
+
 # ── Custom CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
@@ -2137,6 +2152,55 @@ def render_home_tab():
         pass
 
     st.divider()
+
+    # ── Volatile opportunities ─────────────────────────────────────────────────
+    try:
+        from volatile_scanner import scan_volatile_market
+        _vscan = scan_volatile_market(force=False, top_n=5)
+        _opps  = _vscan.get("opportunities", [])
+        if _opps:
+            st.markdown(
+                "<div class='section-header'>⚡ Oportunidades Volátiles — Movers con Catalizador</div>",
+                unsafe_allow_html=True,
+            )
+            _vcols = st.columns(min(len(_opps), 5))
+            for _vc, _opp in zip(_vcols, _opps):
+                _chg   = _opp["change_pct"]
+                _ccol  = "#00d4aa" if _chg > 0 else "#ef5350"
+                _dir   = "▲" if _chg > 0 else "▼"
+                _score = _opp["catalyst_score"]
+                _sbars = "█" * int(_score * 5) + "░" * (5 - int(_score * 5))
+                _evts  = ", ".join(_opp.get("events", [])[:2]) or "Volumen inusual"
+                with _vc:
+                    st.markdown(
+                        f"<div style='background:linear-gradient(145deg,#0d1428,#090d1e);"
+                        f"border:1px solid {_ccol}44;border-radius:14px;padding:14px;"
+                        f"border-top:3px solid {_ccol};'>"
+                        f"<div style='display:flex;justify-content:space-between;align-items:center;'>"
+                        f"<span style='font-size:1.2rem;font-weight:900;color:{_ccol};'>{_opp['ticker']}</span>"
+                        f"<span style='font-size:0.7rem;color:#4a5580;background:#1a2040;"
+                        f"border-radius:6px;padding:2px 7px;'>{_opp.get('sector','')}</span>"
+                        f"</div>"
+                        f"<div style='font-size:1.5rem;font-weight:800;color:{_ccol};margin:6px 0 2px;'>"
+                        f"{_dir} {abs(_chg):.1f}%</div>"
+                        f"<div style='font-size:0.72rem;color:#6b7399;'>"
+                        f"Vol {_opp['volume_ratio']:.1f}x · ${_opp['price']:.2f}</div>"
+                        f"<div style='margin:8px 0 4px;'>"
+                        f"<span style='font-size:0.62rem;color:#4a5580;'>CATALIZADOR</span><br/>"
+                        f"<span style='font-size:0.78rem;color:#f5a623;font-weight:600;'>{_sbars} {_score:.0%}</span>"
+                        f"</div>"
+                        f"<div style='font-size:0.68rem;color:#4f9cf9;margin-top:4px;'>{_evts}</div>"
+                        f"<div style='font-size:0.65rem;color:#4a5580;margin-top:6px;"
+                        f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                        f"max-width:100%;' title='{_opp.get('headline','')}'>"
+                        f"{_opp.get('headline','')[:55]}{'…' if len(_opp.get('headline',''))>55 else ''}"
+                        f"</div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+            st.divider()
+    except Exception:
+        pass
 
     # ── Top conviction picks preview ───────────────────────────────────────────
     if conviction:

@@ -34,13 +34,16 @@ def run_learning_cycle(eval_days: int = 10, min_new_trades: int = 3) -> dict:
     print(f"  CICLO DE APRENDIZAJE — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(f"{'='*55}")
 
-    # ── Step 1: Close expired paper trades ────────────────────────────────────
+    # ── Step 1: Close expired paper trades (both tracks) ──────────────────────
     print("\n[1/3] Cerrando paper trades vencidos...")
-    closed = close_paper_trades(eval_days)
+    reg_closed  = close_paper_trades(eval_days, trade_type="regular")
+    vol_closed  = close_paper_trades(3,         trade_type="volatile")
+    closed = reg_closed + vol_closed
     wins    = sum(1 for t in closed if t["outcome"] == "win")
     losses  = sum(1 for t in closed if t["outcome"] == "loss")
     neutral = sum(1 for t in closed if t["outcome"] == "neutral")
-    print(f"      Cerrados: {len(closed)}  (W:{wins} L:{losses} N:{neutral})")
+    print(f"      Regular: {len(reg_closed)} cerrados | Volátiles: {len(vol_closed)} cerrados")
+    print(f"      Total: {len(closed)}  (W:{wins} L:{losses} N:{neutral})")
 
     # ── Check if enough data to learn ────────────────────────────────────────
     db = db_path()

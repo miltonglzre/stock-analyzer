@@ -18,9 +18,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 from utils import db_path, tmp_path, load_json, get_int
 
 
-def auto_paper_trade(ticker: str, decision: dict) -> int | None:
+def auto_paper_trade(ticker: str, decision: dict,
+                     trade_type: str = "regular") -> int | None:
     """
     Record a Buy/Sell decision as an auto paper trade.
+    trade_type: 'regular' (10-day window) or 'volatile' (3-day window).
     Returns the new trade_id, or None if skipped.
     """
     ticker = ticker.upper()
@@ -37,25 +39,31 @@ def auto_paper_trade(ticker: str, decision: dict) -> int | None:
     verdict   = decision.get("verdict", "Neutral")
     conf      = decision.get("confidence_pct", 50)
 
+    # Separate limits for regular vs volatile
+    max_env   = "MAX_VOLATILE_PAPER_TRADES" if trade_type == "volatile" else "MAX_PAPER_TRADES"
+    max_open  = get_int(max_env, 10 if trade_type == "volatile" else 15)
+
     db = db_path()
     if not db.exists():
         return None
 
     conn = sqlite3.connect(db)
     try:
-        # Skip if open paper trade already exists for this ticker
+        # Skip if open paper trade already exists for this ticker+type
         existing = conn.execute(
-            "SELECT id FROM trades WHERE ticker=? AND exit_date IS NULL AND is_paper=1",
-            (ticker,)
+            "SELECT id FROM trades WHERE ticker=? AND exit_date IS NULL "
+            "AND is_paper=1 AND trade_type=?",
+            (ticker, trade_type)
         ).fetchone()
         if existing:
             return None
 
-        # Skip if at the open-trade limit
+        # Skip if at the open-trade limit for this type
         open_count = conn.execute(
-            "SELECT COUNT(*) FROM trades WHERE exit_date IS NULL AND is_paper=1"
+            "SELECT COUNT(*) FROM trades WHERE exit_date IS NULL "
+            "AND is_paper=1 AND trade_type=?",
+            (trade_type,)
         ).fetchone()[0]
-        max_open = get_int("MAX_PAPER_TRADES", 25)
         if open_count >= max_open:
             return None
 
@@ -63,9 +71,10 @@ def auto_paper_trade(ticker: str, decision: dict) -> int | None:
         cur = conn.execute(
             """INSERT INTO trades
                (ticker, entry_date, entry_price, recommendation,
-                confidence_pct, verdict, notes, is_paper)
-               VALUES (?,?,?,?,?,?,?,1)""",
-            (ticker, date.today().isoformat(), price, rec, conf, verdict, notes),
+                confidence_pct, verdict, notes, is_paper, trade_type)
+               VALUES (?,?,?,?,?,?,?,1,?)""",
+            (ticker, date.today().isoformat(), price, rec, conf, verdict,
+             notes, trade_type),
         )
         trade_id = cur.lastrowid
 
