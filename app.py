@@ -2530,10 +2530,9 @@ def render_scanner_tab():
             "Se actualiza cada 15 min · Aprende de victorias/pérdidas automáticamente"
         )
         try:
-            render_daily_watchlist(
-                picks_data.get("daily_top_10", []) + picks_data.get("closed_picks", []),
-                mkt_open,
-            )
+            # daily_top_10 already contains closed picks (non-active status)
+            # don't concatenate closed_picks or they appear twice
+            render_daily_watchlist(picks_data.get("daily_top_10", []), mkt_open)
         except Exception as _wl_err:
             st.warning(f"Error cargando watchlist: {_wl_err}")
 
