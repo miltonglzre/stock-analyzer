@@ -2086,6 +2086,58 @@ def render_home_tab():
 
     st.divider()
 
+    # ── Learning system status ─────────────────────────────────────────────────
+    try:
+        import sqlite3 as _sqlite3
+        from utils import db_path as _db_path, weights_path as _wp
+        _db = _db_path()
+        if _db.exists():
+            _conn = _sqlite3.connect(_db)
+            _open_pt  = _conn.execute("SELECT COUNT(*) FROM trades WHERE exit_date IS NULL AND is_paper=1").fetchone()[0]
+            _total_pt = _conn.execute("SELECT COUNT(*) FROM trades WHERE is_paper=1 AND outcome IS NOT NULL").fetchone()[0]
+            _wins_pt  = _conn.execute("SELECT COUNT(*) FROM trades WHERE is_paper=1 AND outcome='win'").fetchone()[0]
+            _conn.close()
+            _wr = round(_wins_pt / _total_pt * 100) if _total_pt > 0 else 0
+            _max_pt = 25
+            _fill_pct = int(_open_pt / _max_pt * 100)
+
+            import json as _json
+            _w_data = {}
+            if _wp().exists():
+                _w_data = _json.loads(_wp().read_text())
+            _last_update = _w_data.get("last_updated", "Nunca")[:10] if _w_data else "Nunca"
+
+            _lc1, _lc2, _lc3, _lc4 = st.columns(4)
+            _lc1.markdown(
+                f"<div style='background:#0d1428;border:1px solid #1a2040;border-radius:12px;padding:14px;'>"
+                f"<div style='font-size:0.65rem;color:#4a5580;text-transform:uppercase;letter-spacing:0.7px;'>Paper trades abiertos</div>"
+                f"<div style='font-size:1.6rem;font-weight:900;color:#4f9cf9;margin:4px 0;'>{_open_pt}<span style='font-size:0.9rem;color:#4a5580;'>/{_max_pt}</span></div>"
+                f"<div style='background:#1a2040;border-radius:4px;height:4px;margin-top:6px;'>"
+                f"<div style='background:#4f9cf9;width:{_fill_pct}%;height:4px;border-radius:4px;'></div></div>"
+                f"</div>", unsafe_allow_html=True)
+            _lc2.markdown(
+                f"<div style='background:#0d1428;border:1px solid #1a2040;border-radius:12px;padding:14px;'>"
+                f"<div style='font-size:0.65rem;color:#4a5580;text-transform:uppercase;letter-spacing:0.7px;'>Trades cerrados</div>"
+                f"<div style='font-size:1.6rem;font-weight:900;color:#f5a623;margin:4px 0;'>{_total_pt}</div>"
+                f"<div style='font-size:0.72rem;color:#6b7399;'>histórico acumulado</div>"
+                f"</div>", unsafe_allow_html=True)
+            _lc3.markdown(
+                f"<div style='background:#0d1428;border:1px solid #1a2040;border-radius:12px;padding:14px;'>"
+                f"<div style='font-size:0.65rem;color:#4a5580;text-transform:uppercase;letter-spacing:0.7px;'>Win rate sistema</div>"
+                f"<div style='font-size:1.6rem;font-weight:900;color:{'#00d4aa' if _wr>=50 else '#ef5350'};margin:4px 0;'>{_wr}%</div>"
+                f"<div style='font-size:0.72rem;color:#6b7399;'>{_wins_pt} wins de {_total_pt}</div>"
+                f"</div>", unsafe_allow_html=True)
+            _lc4.markdown(
+                f"<div style='background:#0d1428;border:1px solid #1a2040;border-radius:12px;padding:14px;'>"
+                f"<div style='font-size:0.65rem;color:#4a5580;text-transform:uppercase;letter-spacing:0.7px;'>Última iteración</div>"
+                f"<div style='font-size:1.1rem;font-weight:700;color:#a0a8c0;margin:6px 0;'>{_last_update}</div>"
+                f"<div style='font-size:0.72rem;color:#6b7399;'>pesos del modelo</div>"
+                f"</div>", unsafe_allow_html=True)
+    except Exception:
+        pass
+
+    st.divider()
+
     # ── Top conviction picks preview ───────────────────────────────────────────
     if conviction:
         st.markdown(
@@ -2636,6 +2688,16 @@ with tab2:
             st.error(f"Error al mostrar resultados: {_render_err}")
             with st.expander("Detalle del error"):
                 st.code(traceback.format_exc())
+
+        # ── Auto-register as paper trade (outside render block) ───────────────
+        try:
+            from auto_paper_trade import auto_paper_trade
+            _pt_id = auto_paper_trade(ticker_input, _data["decision"])
+            if _pt_id:
+                rec = _data["decision"].get("recommendation", "")
+                st.toast(f"📋 Paper trade #{_pt_id} auto-registrado ({rec})")
+        except Exception:
+            pass
 
 with tab3:
     render_trades_tab()

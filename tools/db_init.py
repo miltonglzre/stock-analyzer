@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS trades (
     confidence_pct  INTEGER NOT NULL,
     verdict         TEXT    NOT NULL,
     notes           TEXT,
+    is_paper        INTEGER NOT NULL DEFAULT 0,   -- 1 = auto paper trade
     created_at      TEXT    DEFAULT (datetime('now'))
 );
 
@@ -83,6 +84,12 @@ def init_db():
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.executescript(SCHEMA)
+    # Migrate existing DBs: add is_paper column if missing
+    try:
+        conn.execute("ALTER TABLE trades ADD COLUMN is_paper INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     conn.commit()
     conn.close()
     print(f"[OK] Database initialized at: {path}")
