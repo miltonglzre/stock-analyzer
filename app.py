@@ -2520,12 +2520,6 @@ def render_scanner_tab():
         render_conviction_picks(conviction_picks, mkt_open, earnings_map)
         st.divider()
 
-        try:
-            render_projections_section(conviction_picks)
-            st.divider()
-        except Exception:
-            pass
-
         # ── Daily Top 10 watchlist ─────────────────────────────────────────────
         generated_at = picks_data.get("generated_at", "")[:16].replace("T", " ")
         last_upd     = picks_data.get("last_updated", "")[:16].replace("T", " ")
@@ -2561,6 +2555,89 @@ def render_scanner_tab():
                     )
     except Exception as e:
         st.warning(f"No se pudieron cargar los picks diarios: {e}")
+
+    st.divider()
+
+    # ── Volatile picks — 3-day track ──────────────────────────────────────────
+    try:
+        from volatile_daily_picks import load_volatile_picks, generate_volatile_picks
+        from volatile_scanner import scan_volatile_market
+
+        _vscan  = scan_volatile_market(force=False, top_n=8)
+        _vpicks = generate_volatile_picks(_vscan)
+
+        _vactive = _vpicks.get("active_picks", [])
+        _vclosed = _vpicks.get("closed_picks", [])
+        _vwr     = _vpicks.get("win_rate", 0)
+        _vtotal  = _vpicks.get("total_closed", 0)
+
+        st.markdown(
+            f"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;'>"
+            f"<div class='section-header' style='margin-bottom:0;'>⚡ Picks Volátiles — Track 3 Días</div>"
+            f"<div style='font-size:0.78rem;color:#f5a623;font-weight:700;'>"
+            f"WR {_vwr}% · {_vtotal} cerrados · {len(_vactive)}/8 activos</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+        if _vactive:
+            # Table view for easy comparison
+            _vrows = []
+            for _vp in _vactive:
+                _vrows.append({
+                    "Ticker":    _vp["ticker"],
+                    "Sector":    _vp.get("sector", "")[:12],
+                    "Dir":       "▲ Long" if _vp.get("direction") == "up" else "▼ Short",
+                    "Entrada $": _vp.get("entry_price", 0),
+                    "Actual $":  _vp.get("current_price", 0),
+                    "P&L %":     _vp.get("pnl_pct", 0.0),
+                    "Catalyst":  _vp.get("catalyst_score", 0.0),
+                    "Vol x":     _vp.get("volume_ratio", 0.0),
+                    "Evento":    ", ".join(_vp.get("events", [])[:2]) or "vol_spike",
+                    "Expira":    _vp.get("expires_at", "")[-5:],
+                })
+            _vdf = pd.DataFrame(_vrows)
+            st.dataframe(
+                _vdf, hide_index=True, use_container_width=True,
+                column_config={
+                    "Ticker":    st.column_config.TextColumn("Ticker"),
+                    "Sector":    st.column_config.TextColumn("Sector"),
+                    "Dir":       st.column_config.TextColumn("Dirección", help="Long = apuesta alcista · Short = apuesta bajista"),
+                    "Entrada $": st.column_config.NumberColumn("Entrada $", format="$%.2f"),
+                    "Actual $":  st.column_config.NumberColumn("Actual $",  format="$%.2f"),
+                    "P&L %":     st.column_config.NumberColumn("P&L %",     format="%+.2f%%",
+                                     help="Ganancia/pérdida desde entrada. Objetivo: +10% | Stop: -7%"),
+                    "Catalyst":  st.column_config.NumberColumn("Catalyst",  format="%.2f",
+                                     help="Score del catalizador (volumen + precio + noticias). >0.6 = señal fuerte"),
+                    "Vol x":     st.column_config.NumberColumn("Vol x",     format="%.1fx"),
+                    "Evento":    st.column_config.TextColumn("Catalizador",
+                                     help="Tipo de evento que disparó el pick"),
+                    "Expira":    st.column_config.TextColumn("Expira", help="Fecha de cierre automático (3 días)"),
+                },
+            )
+
+        if _vclosed:
+            _recent = sorted(_vclosed, key=lambda x: x.get("last_updated", ""), reverse=True)[:8]
+            with st.expander(f"Picks volátiles cerrados ({len(_vclosed)} total)"):
+                for _vp in _recent:
+                    _oc   = _vp.get("outcome", "neutral")
+                    _icon = "✓" if _oc == "win" else ("✗" if _oc == "loss" else "○")
+                    _ocol = "#00d4aa" if _oc == "win" else ("#ef5350" if _oc == "loss" else "#6b7399")
+                    _evts = ", ".join(_vp.get("events", [])[:2]) or "vol_spike"
+                    st.markdown(
+                        f"<span style='color:{_ocol};font-weight:700;'>{_icon} {_vp['ticker']}</span>"
+                        f"&nbsp; <span style='color:#4a5580;font-size:0.8rem;'>"
+                        f"entrada ${_vp.get('entry_price',0):.2f} → "
+                        f"<span style='color:{_ocol};'>{_vp.get('pnl_pct',0):+.1f}%</span>"
+                        f"&nbsp;·&nbsp;{_evts}&nbsp;·&nbsp;{_vp.get('sector','')}</span>",
+                        unsafe_allow_html=True,
+                    )
+
+        if not _vactive and not _vclosed:
+            st.info("Sin picks volátiles activos. El scanner no encontró movers con catalizador suficiente hoy.")
+
+    except Exception as _ve:
+        st.info(f"Picks volátiles: {_ve}")
 
     st.divider()
 
