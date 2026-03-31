@@ -260,10 +260,11 @@ def generate_daily_picks(scan_data: dict) -> dict:
 
         # If active top10 dropped below 7, try to fill from scan
         if len(top10_active) < 7:
-            active_tickers = {p["ticker"] for p in top10_active}
+            # Exclude both active AND already-closed tickers to prevent duplicates
+            used_tickers = {p["ticker"] for p in top10_updated}
             candidates = [
                 r for r in all_results
-                if r["ticker"] not in active_tickers
+                if r["ticker"] not in used_tickers
                 and _is_watchlist_candidate(r)
             ]
             candidates.sort(key=lambda x: abs(x["score"]), reverse=True)
@@ -276,10 +277,11 @@ def generate_daily_picks(scan_data: dict) -> dict:
 
         # Re-fill conviction if any closed
         if len(conv_active) < 5:
-            active_tickers = {p["ticker"] for p in conv_active}
+            # Exclude both active AND already-closed conviction tickers
+            used_conv_tickers = {p["ticker"] for p in conv_updated}
             candidates = [
                 r for r in all_results
-                if r["ticker"] not in active_tickers
+                if r["ticker"] not in used_conv_tickers
                 and _is_high_conviction(r)
             ]
             candidates.sort(key=lambda x: abs(x["score"]), reverse=True)

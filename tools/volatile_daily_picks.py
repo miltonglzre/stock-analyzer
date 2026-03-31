@@ -174,8 +174,8 @@ def generate_volatile_picks(scan_data: dict) -> dict:
     # Keep only still-active after threshold/expiry checks
     still_active = [p for p in active if p["status"] == "active"]
 
-    # Fill empty slots with new opportunities (avoid re-adding same tickers)
-    active_tickers = {p["ticker"] for p in still_active}
+    # Fill empty slots — exclude active AND recently-closed to prevent duplicates
+    active_tickers = {p["ticker"] for p in still_active} | {p["ticker"] for p in closed_all}
     slots_available = MAX_ACTIVE - len(still_active)
 
     for opp in opportunities:
