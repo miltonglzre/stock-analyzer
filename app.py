@@ -1551,6 +1551,16 @@ def cached_scan(force: bool) -> dict:
     return scan_market(force=force, top_n=10)
 
 
+@st.cache_data(ttl=300, show_spinner=False)   # 5-min cache for intraday data
+def cached_intraday(force: bool) -> dict:
+    try:
+        from intraday_scanner import scan_intraday_movers
+        return scan_intraday_movers(force=force)
+    except Exception as e:
+        return {"alerts": [], "sell_signals": [], "market_open": False,
+                "cached_at": datetime.now().isoformat(), "error": str(e)}
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def cached_fear_greed() -> dict:
     try:
@@ -2515,6 +2525,19 @@ def render_home_tab():
 
     st.divider()
 
+    # ── Real-time intraday alerts (compact) ────────────────────────────────────
+    try:
+        _intra = cached_intraday(force=False)
+        if _intra.get("alerts") or any(s.get("action") == "sell" for s in _intra.get("sell_signals", [])):
+            st.markdown(
+                "<div class='section-header'>🔴 Alertas en Tiempo Real</div>",
+                unsafe_allow_html=True,
+            )
+            render_intraday_alerts(_intra, compact=True)
+            st.divider()
+    except Exception:
+        pass
+
     # ── Volatile picks — 3-day track ──────────────────────────────────────────
     _vactive = vpicks.get("active_picks", [])
     _vclosed = vpicks.get("closed_picks", [])
@@ -2665,6 +2688,130 @@ def render_home_tab():
     st.caption(f"Datos: Yahoo Finance · Google News RSS · CNN Fear & Greed · {now_str}")
 
 
+def render_intraday_alerts(intraday: dict, compact: bool = False):
+    """
+    Render real-time intraday alerts and sell signals.
+    compact=True → shorter cards for dashboard; False → full detail for scanner tab.
+    """
+    alerts      = intraday.get("alerts", [])
+    sell_sigs   = intraday.get("sell_signals", [])
+    market_open = intraday.get("market_open", False)
+    cached_at   = intraday.get("cached_at", "")[:16].replace("T", " ")
+    error       = intraday.get("error", "")
+
+    # ── Sell signals banner (shown even in compact mode) ──────────────────────
+    urgent_sells = [s for s in sell_sigs if s.get("action") == "sell"]
+    watch_sells  = [s for s in sell_sigs if s.get("action") == "watch"]
+
+    if urgent_sells:
+        for s in urgent_sells:
+            pnl_str = f"{s.get('pnl_pct', 0):+.1f}%"
+            st.error(
+                f"🚨 **{s['ticker']}** — {s['reason']}  &nbsp;|&nbsp;  "
+                f"P&L desde entrada: **{pnl_str}**",
+                icon="🔴",
+            )
+    if watch_sells and not compact:
+        for s in watch_sells:
+            st.warning(
+                f"👁 **{s['ticker']}** — {s['reason']}  &nbsp;|&nbsp;  "
+                f"P&L: {s.get('pnl_pct', 0):+.1f}%",
+                icon="⚠️",
+            )
+
+    if not alerts and not urgent_sells:
+        if not compact:
+            if error:
+                st.info(f"Scanner intraday: {error}")
+            elif not market_open:
+                st.info("🌙 Mercado cerrado — las alertas en tiempo real se activan cuando NYSE abre (9:30 AM ET).")
+            else:
+                st.info("Sin movimientos inusuales detectados ahora mismo. El scanner revisa cada 5 min.")
+        return
+
+    if not alerts:
+        return
+
+    # ── Alert header ─────────────────────────────────────────────────────────
+    phase_counts = {"early": 0, "active": 0, "extended": 0}
+    for a in alerts:
+        phase_counts[a.get("phase", "extended")] = phase_counts.get(a.get("phase","extended"), 0) + 1
+
+    st.markdown(
+        f"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;'>"
+        f"<div>"
+        f"<span style='font-size:1.1rem;font-weight:900;color:#ef5350;'>🔴 ALERTAS EN TIEMPO REAL</span>"
+        f"<span style='font-size:0.75rem;color:#4a5580;margin-left:10px;'>actualizado {cached_at}</span>"
+        f"</div>"
+        f"<div style='font-size:0.75rem;'>"
+        f"<span style='color:#00d4aa;font-weight:700;'>🌅 {phase_counts['early']} tempranas</span> &nbsp;"
+        f"<span style='color:#f5a623;font-weight:700;'>📈 {phase_counts['active']} activas</span> &nbsp;"
+        f"<span style='color:#888;'>⚠️ {phase_counts['extended']} extendidas</span>"
+        f"</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    # ── Alert cards ────────────────────────────────────────────────────────────
+    phase_cfg = {
+        "early":    ("#00d4aa", "🌅 TEMPRANA",  "Mejor ventana de entrada — movimiento recién comenzando"),
+        "active":   ("#f5a623", "📈 ACTIVA",    "Movimiento en curso — entrada válida pero con más riesgo"),
+        "extended": ("#888888", "⚠️ EXTENDIDA", "Movimiento lleva >2h — entrada tardía, riesgo elevado"),
+    }
+    show_n = 4 if compact else len(alerts)
+    cols_n = min(show_n, 4)
+    cols   = st.columns(cols_n)
+
+    for col, alert in zip(cols, alerts[:show_n]):
+        phase  = alert.get("phase", "unknown")
+        pcol, plabel, ptip = phase_cfg.get(phase, ("#888", phase.upper(), ""))
+        chg    = alert["change_pct"]
+        dcol   = "#00d4aa" if chg > 0 else "#ef5350"
+        dir_ar = "▲" if chg > 0 else "▼"
+        rr     = alert.get("risk_reward", 0)
+        rr_col = "#00d4aa" if rr >= 1.5 else "#f5a623" if rr >= 1.0 else "#ef5350"
+
+        with col:
+            st.markdown(
+                f"<div style='background:linear-gradient(145deg,#0d1428,#090d1e);"
+                f"border:1px solid {pcol}44;border-radius:14px;padding:14px;"
+                f"border-top:3px solid {pcol};'>"
+                # Ticker + phase badge
+                f"<div style='display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;'>"
+                f"<span style='font-size:1.4rem;font-weight:900;color:#ccd6f6;'>{alert['ticker']}</span>"
+                f"<span style='font-size:0.6rem;color:{pcol};background:{pcol}22;"
+                f"border:1px solid {pcol}44;border-radius:5px;padding:2px 6px;font-weight:700;'>{plabel}</span>"
+                f"</div>"
+                # Price + change
+                f"<div style='font-size:1.5rem;font-weight:800;color:{dcol};'>"
+                f"{dir_ar} {abs(chg):.1f}%</div>"
+                f"<div style='font-size:0.72rem;color:#6b7399;margin-bottom:8px;'>"
+                f"${alert['price']:.2f} · vol {alert['vol_spike']:.1f}x · RSI {alert.get('rsi_5m',50):.0f}</div>"
+                # Entry / Stop / Target
+                f"<div style='background:#0a0f1e;border-radius:8px;padding:8px;margin-bottom:8px;'>"
+                f"<div style='display:flex;justify-content:space-between;font-size:0.65rem;color:#4a5580;margin-bottom:4px;'>"
+                f"<span>ENTRADA</span><span>STOP</span><span>OBJETIVO</span></div>"
+                f"<div style='display:flex;justify-content:space-between;font-size:0.78rem;font-weight:700;'>"
+                f"<span style='color:#4f9cf9;'>${alert['entry_low']:.2f}–{alert['entry_high']:.2f}</span>"
+                f"<span style='color:#ef5350;'>${alert['stop_price']:.2f}</span>"
+                f"<span style='color:#00d4aa;'>${alert['target_price']:.2f}</span>"
+                f"</div>"
+                f"<div style='text-align:right;font-size:0.65rem;margin-top:3px;color:{rr_col};'>"
+                f"R/R {rr:.1f}x</div>"
+                f"</div>"
+                # Headline
+                + (f"<div style='font-size:0.65rem;color:#4f9cf9;line-height:1.3;'>"
+                   f"📰 {alert['headline'][:70]}{'…' if len(alert['headline'])>70 else ''}</div>"
+                   if alert.get("headline") else
+                   f"<div style='font-size:0.65rem;color:#4a5580;'>📊 Movimiento por volumen inusual</div>")
+                + f"<div style='font-size:0.62rem;color:#4a5580;margin-top:4px;'>{alert.get('sector','')}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+            if not compact:
+                st.caption(ptip)
+
+
 def render_scanner_tab():
     mkt = get_market_status()
 
@@ -2694,6 +2841,47 @@ def render_scanner_tab():
                 f"<span style='color:#555;font-size:0.8rem;'>{now_str}</span></div>",
                 unsafe_allow_html=True,
             )
+
+    # ── Intraday real-time alerts ──────────────────────────────────────────────
+    _force_intra = st.session_state.get("force_intraday", False)
+    intraday_data = cached_intraday(force=_force_intra)
+    if _force_intra:
+        st.session_state["force_intraday"] = False
+
+    ibtn_col, _ = st.columns([1, 4])
+    with ibtn_col:
+        if st.button("⚡ Actualizar alertas", use_container_width=True,
+                     help="Forzar nuevo scan intraday (ignora caché de 5 min)"):
+            cached_intraday.clear()
+            st.session_state["force_intraday"] = True
+            st.rerun()
+
+    render_intraday_alerts(intraday_data, compact=False)
+
+    # Auto-register early/active alerts as volatile paper trades for learning
+    try:
+        from auto_paper_trade import auto_paper_trade
+        for _alert in intraday_data.get("alerts", []):
+            if _alert.get("phase") in ("early", "active") and _alert.get("alert_score", 0) >= 0.55:
+                _adec = {
+                    "recommendation": "Buy" if _alert["direction"] == "long" else "Sell",
+                    "current_price":  _alert["price"],
+                    "target_price":   _alert["target_price"],
+                    "stop_loss":      _alert["stop_price"],
+                    "confidence_pct": int(_alert["alert_score"] * 100),
+                    "verdict":        f"Intraday alert phase={_alert['phase']}",
+                    "_volatile_meta": (
+                        f"events={','.join([_alert.get('headline','')[:30]])} "
+                        f"vol_ratio={_alert['vol_spike']} "
+                        f"price_chg={_alert['change_pct']} "
+                        f"sector={_alert.get('sector','Unknown')}"
+                    ),
+                }
+                auto_paper_trade(_alert["ticker"], _adec, trade_type="volatile")
+    except Exception:
+        pass
+
+    st.divider()
 
     # Market-closed warning
     if not mkt["is_open"]:
