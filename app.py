@@ -1957,11 +1957,22 @@ def build_fg_gauge(score: float, rating: str, color: str) -> go.Figure:
 
 def render_home_tab():
     """Home dashboard — overview of everything at a glance."""
-    from daily_picks import load_daily_picks
+    from daily_picks import load_daily_picks, generate_daily_picks
+    from datetime import date as _date
 
     mkt   = get_market_status()
     fg    = cached_fear_greed()
     picks = load_daily_picks()
+
+    # Auto-refresh picks if stale (different date or empty)
+    today_str = _date.today().isoformat()
+    if picks.get("date") != today_str or not picks.get("daily_top_10"):
+        try:
+            scan_data = cached_scan(force=False)
+            if scan_data.get("all_results"):
+                picks = cached_daily_picks(scan_data.get("cached_at", ""), scan_data)
+        except Exception:
+            pass
 
     # ── Page title ─────────────────────────────────────────────────────────────
     now_et = mkt.get("now_et")
