@@ -1269,6 +1269,13 @@ def cached_daily_picks(scan_data_ts: str, scan_data: dict) -> dict:
     return generate_daily_picks(scan_data)
 
 
+@st.cache_data(ttl=120, show_spinner=False)
+def cached_volatile_picks(vscan_ts: str, vscan: dict) -> dict:
+    """Refresh volatile daily picks from scanner data."""
+    from volatile_daily_picks import generate_volatile_picks
+    return generate_volatile_picks(vscan)
+
+
 def _rec_badge(rec: str) -> str:
     color = {"Buy": "#00d4aa", "Sell": "#ef5350", "Wait": "#f39c12"}.get(rec, "#aaa")
     return (
@@ -1958,13 +1965,14 @@ def build_fg_gauge(score: float, rating: str, color: str) -> go.Figure:
 def render_home_tab():
     """Home dashboard — overview of everything at a glance."""
     from daily_picks import load_daily_picks, generate_daily_picks
+    from volatile_daily_picks import load_volatile_picks
     from datetime import date as _date
 
     mkt   = get_market_status()
     fg    = cached_fear_greed()
     picks = load_daily_picks()
 
-    # Auto-refresh picks if stale (different date or empty)
+    # Auto-refresh regular picks if stale
     today_str = _date.today().isoformat()
     if picks.get("date") != today_str or not picks.get("daily_top_10"):
         try:
@@ -1973,6 +1981,16 @@ def render_home_tab():
                 picks = cached_daily_picks(scan_data.get("cached_at", ""), scan_data)
         except Exception:
             pass
+
+    # Load and auto-refresh volatile picks
+    vpicks = load_volatile_picks()
+    try:
+        from volatile_scanner import scan_volatile_market
+        _vscan = scan_volatile_market(force=False, top_n=8)
+        if _vscan.get("opportunities"):
+            vpicks = cached_volatile_picks(_vscan.get("cached_at", ""), _vscan)
+    except Exception:
+        pass
 
     # ── Page title ─────────────────────────────────────────────────────────────
     now_et = mkt.get("now_et")
@@ -2112,111 +2130,167 @@ def render_home_tab():
 
     st.divider()
 
-    # ── Learning system status ─────────────────────────────────────────────────
+    # ── Learning system status — two tracks ────────────────────────────────────
     try:
         import sqlite3 as _sqlite3
         from utils import db_path as _db_path, weights_path as _wp
         _db = _db_path()
         if _db.exists():
             _conn = _sqlite3.connect(_db)
-            _open_pt  = _conn.execute("SELECT COUNT(*) FROM trades WHERE exit_date IS NULL AND is_paper=1").fetchone()[0]
-            _total_pt = _conn.execute("SELECT COUNT(*) FROM trades WHERE is_paper=1 AND outcome IS NOT NULL").fetchone()[0]
-            _wins_pt  = _conn.execute("SELECT COUNT(*) FROM trades WHERE is_paper=1 AND outcome='win'").fetchone()[0]
+            # Regular track stats
+            _reg_open   = _conn.execute("SELECT COUNT(*) FROM trades WHERE exit_date IS NULL AND is_paper=1 AND trade_type='regular'").fetchone()[0]
+            _reg_closed = _conn.execute("SELECT COUNT(*) FROM trades WHERE is_paper=1 AND outcome IS NOT NULL AND trade_type='regular'").fetchone()[0]
+            _reg_wins   = _conn.execute("SELECT COUNT(*) FROM trades WHERE is_paper=1 AND outcome='win' AND trade_type='regular'").fetchone()[0]
+            # Volatile track stats
+            _vol_open   = _conn.execute("SELECT COUNT(*) FROM trades WHERE exit_date IS NULL AND is_paper=1 AND trade_type='volatile'").fetchone()[0]
+            _vol_closed = _conn.execute("SELECT COUNT(*) FROM trades WHERE is_paper=1 AND outcome IS NOT NULL AND trade_type='volatile'").fetchone()[0]
+            _vol_wins   = _conn.execute("SELECT COUNT(*) FROM trades WHERE is_paper=1 AND outcome='win' AND trade_type='volatile'").fetchone()[0]
             _conn.close()
-            _wr = round(_wins_pt / _total_pt * 100) if _total_pt > 0 else 0
-            _max_pt = 25
-            _fill_pct = int(_open_pt / _max_pt * 100)
+
+            _reg_wr = round(_reg_wins / _reg_closed * 100) if _reg_closed > 0 else 0
+            _vol_wr = round(_vol_wins / _vol_closed * 100) if _vol_closed > 0 else 0
 
             import json as _json
             _w_data = {}
             if _wp().exists():
                 _w_data = _json.loads(_wp().read_text())
-            _last_update = _w_data.get("last_updated", "Nunca")[:10] if _w_data else "Nunca"
+            _last_reg = _w_data.get("last_updated", "—")[:10] if _w_data else "—"
+
+            _vw_path = _db_path().parent / "volatile_weights.json"
+            _last_vol = "—"
+            if _vw_path.exists():
+                _vw = _json.loads(_vw_path.read_text())
+                _last_vol = _vw.get("last_updated", "—")[:10]
+
+            st.markdown(
+                "<div style='display:flex;align-items:center;gap:10px;margin-bottom:10px;'>"
+                "<div style='font-size:0.7rem;color:#4a5580;text-transform:uppercase;letter-spacing:0.8px;'>Sistema de aprendizaje</div>"
+                "</div>", unsafe_allow_html=True)
 
             _lc1, _lc2, _lc3, _lc4 = st.columns(4)
             _lc1.markdown(
                 f"<div style='background:#0d1428;border:1px solid #1a2040;border-radius:12px;padding:14px;'>"
-                f"<div style='font-size:0.65rem;color:#4a5580;text-transform:uppercase;letter-spacing:0.7px;'>Paper trades abiertos</div>"
-                f"<div style='font-size:1.6rem;font-weight:900;color:#4f9cf9;margin:4px 0;'>{_open_pt}<span style='font-size:0.9rem;color:#4a5580;'>/{_max_pt}</span></div>"
-                f"<div style='background:#1a2040;border-radius:4px;height:4px;margin-top:6px;'>"
-                f"<div style='background:#4f9cf9;width:{_fill_pct}%;height:4px;border-radius:4px;'></div></div>"
+                f"<div style='font-size:0.62rem;color:#4f9cf9;text-transform:uppercase;letter-spacing:0.7px;'>📈 Multi-día (10d)</div>"
+                f"<div style='font-size:1.5rem;font-weight:900;color:#4f9cf9;margin:6px 0 2px;'>{_reg_wr}%</div>"
+                f"<div style='font-size:0.72rem;color:#6b7399;'>WR · {_reg_open} open · {_reg_closed} cerrados</div>"
+                f"<div style='font-size:0.68rem;color:#4a5580;margin-top:4px;'>iter: {_last_reg}</div>"
                 f"</div>", unsafe_allow_html=True)
             _lc2.markdown(
-                f"<div style='background:#0d1428;border:1px solid #1a2040;border-radius:12px;padding:14px;'>"
-                f"<div style='font-size:0.65rem;color:#4a5580;text-transform:uppercase;letter-spacing:0.7px;'>Trades cerrados</div>"
-                f"<div style='font-size:1.6rem;font-weight:900;color:#f5a623;margin:4px 0;'>{_total_pt}</div>"
-                f"<div style='font-size:0.72rem;color:#6b7399;'>histórico acumulado</div>"
+                f"<div style='background:#0d1428;border:1px solid #f5a62344;border-radius:12px;padding:14px;'>"
+                f"<div style='font-size:0.62rem;color:#f5a623;text-transform:uppercase;letter-spacing:0.7px;'>⚡ Volátil (3d)</div>"
+                f"<div style='font-size:1.5rem;font-weight:900;color:#f5a623;margin:6px 0 2px;'>{_vol_wr}%</div>"
+                f"<div style='font-size:0.72rem;color:#6b7399;'>WR · {_vol_open} open · {_vol_closed} cerrados</div>"
+                f"<div style='font-size:0.68rem;color:#4a5580;margin-top:4px;'>iter: {_last_vol}</div>"
                 f"</div>", unsafe_allow_html=True)
             _lc3.markdown(
                 f"<div style='background:#0d1428;border:1px solid #1a2040;border-radius:12px;padding:14px;'>"
-                f"<div style='font-size:0.65rem;color:#4a5580;text-transform:uppercase;letter-spacing:0.7px;'>Win rate sistema</div>"
-                f"<div style='font-size:1.6rem;font-weight:900;color:{'#00d4aa' if _wr>=50 else '#ef5350'};margin:4px 0;'>{_wr}%</div>"
-                f"<div style='font-size:0.72rem;color:#6b7399;'>{_wins_pt} wins de {_total_pt}</div>"
+                f"<div style='font-size:0.62rem;color:#4a5580;text-transform:uppercase;letter-spacing:0.7px;'>Total cerrados</div>"
+                f"<div style='font-size:1.5rem;font-weight:900;color:#a0a8c0;margin:6px 0 2px;'>{_reg_closed + _vol_closed}</div>"
+                f"<div style='font-size:0.72rem;color:#6b7399;'>{_reg_closed} regulares + {_vol_closed} volátiles</div>"
                 f"</div>", unsafe_allow_html=True)
+            _total_open = _reg_open + _vol_open
+            _max_total  = 25
+            _fill_pct   = int(_total_open / _max_total * 100)
             _lc4.markdown(
                 f"<div style='background:#0d1428;border:1px solid #1a2040;border-radius:12px;padding:14px;'>"
-                f"<div style='font-size:0.65rem;color:#4a5580;text-transform:uppercase;letter-spacing:0.7px;'>Última iteración</div>"
-                f"<div style='font-size:1.1rem;font-weight:700;color:#a0a8c0;margin:6px 0;'>{_last_update}</div>"
-                f"<div style='font-size:0.72rem;color:#6b7399;'>pesos del modelo</div>"
+                f"<div style='font-size:0.62rem;color:#4a5580;text-transform:uppercase;letter-spacing:0.7px;'>Posiciones abiertas</div>"
+                f"<div style='font-size:1.5rem;font-weight:900;color:#4f9cf9;margin:6px 0 2px;'>{_total_open}<span style='font-size:0.9rem;color:#4a5580;'>/{_max_total}</span></div>"
+                f"<div style='background:#1a2040;border-radius:4px;height:4px;margin-top:6px;'>"
+                f"<div style='background:#4f9cf9;width:{_fill_pct}%;height:4px;border-radius:4px;'></div></div>"
                 f"</div>", unsafe_allow_html=True)
     except Exception:
         pass
 
     st.divider()
 
-    # ── Volatile opportunities ─────────────────────────────────────────────────
-    try:
-        from volatile_scanner import scan_volatile_market
-        _vscan = scan_volatile_market(force=False, top_n=5)
-        _opps  = _vscan.get("opportunities", [])
-        if _opps:
-            st.markdown(
-                "<div class='section-header'>⚡ Oportunidades Volátiles — Movers con Catalizador</div>",
-                unsafe_allow_html=True,
-            )
-            _vcols = st.columns(min(len(_opps), 5))
-            for _vc, _opp in zip(_vcols, _opps):
-                _chg   = _opp["change_pct"]
-                _ccol  = "#00d4aa" if _chg > 0 else "#ef5350"
-                _dir   = "▲" if _chg > 0 else "▼"
-                _score = _opp["catalyst_score"]
-                _sbars = "█" * int(_score * 5) + "░" * (5 - int(_score * 5))
-                _evts  = ", ".join(_opp.get("events", [])[:2]) or "Volumen inusual"
+    # ── Volatile picks — 3-day track ──────────────────────────────────────────
+    _vactive = vpicks.get("active_picks", [])
+    _vclosed = vpicks.get("closed_picks", [])
+    _vwr     = vpicks.get("win_rate", 0)
+    _vtotal  = vpicks.get("total_closed", 0)
+
+    st.markdown(
+        f"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;'>"
+        f"<div class='section-header' style='margin-bottom:0;'>⚡ Picks Volátiles — 3 Días</div>"
+        f"<div style='font-size:0.75rem;color:#f5a623;'>"
+        f"WR {_vwr}% · {_vtotal} cerrados</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    if _vactive:
+        _vc_cols = st.columns(min(len(_vactive), 4))
+        for _vc, _vp in zip(_vc_cols, _vactive[:4]):
+            _chg   = _vp.get("pnl_pct", 0)
+            _ccol  = "#00d4aa" if _chg >= 0 else "#ef5350"
+            _score = _vp.get("catalyst_score", 0)
+            _sbars = "█" * int(_score * 5) + "░" * (5 - int(_score * 5))
+            _evts  = ", ".join(_vp.get("events", [])[:2]) or "vol_spike"
+            _dir   = "▲" if _vp.get("direction") == "up" else "▼"
+            _exp   = _vp.get("expires_at", "")[-5:]  # MM-DD
+            with _vc:
+                st.markdown(
+                    f"<div style='background:linear-gradient(145deg,#0d1428,#090d1e);"
+                    f"border:1px solid {_ccol}33;border-radius:14px;padding:12px;"
+                    f"border-top:3px solid #f5a623;'>"
+                    f"<div style='display:flex;justify-content:space-between;align-items:center;'>"
+                    f"<span style='font-size:1.15rem;font-weight:900;color:#ccd6f6;'>{_vp['ticker']}</span>"
+                    f"<span style='font-size:0.65rem;color:#4a5580;background:#1a2040;"
+                    f"border-radius:5px;padding:2px 6px;'>{_vp.get('sector','')[:8]}</span>"
+                    f"</div>"
+                    f"<div style='font-size:0.68rem;color:#4a5580;margin:2px 0 6px;'>"
+                    f"{_dir} entrada ${_vp.get('entry_price',0):.2f} · exp {_exp}</div>"
+                    f"<div style='font-size:1.3rem;font-weight:800;color:{_ccol};'>{_chg:+.1f}%</div>"
+                    f"<div style='margin:6px 0 3px;'>"
+                    f"<span style='font-size:0.58rem;color:#4a5580;'>CATALYST</span> "
+                    f"<span style='font-size:0.72rem;color:#f5a623;font-weight:600;'>{_sbars}</span>"
+                    f"</div>"
+                    f"<div style='font-size:0.65rem;color:#4f9cf9;'>{_evts}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+        if len(_vactive) > 4:
+            _extra = _vactive[4:]
+            _ext_cols = st.columns(min(len(_extra), 4))
+            for _vc, _vp in zip(_ext_cols, _extra):
+                _chg  = _vp.get("pnl_pct", 0)
+                _ccol = "#00d4aa" if _chg >= 0 else "#ef5350"
                 with _vc:
                     st.markdown(
-                        f"<div style='background:linear-gradient(145deg,#0d1428,#090d1e);"
-                        f"border:1px solid {_ccol}44;border-radius:14px;padding:14px;"
-                        f"border-top:3px solid {_ccol};'>"
-                        f"<div style='display:flex;justify-content:space-between;align-items:center;'>"
-                        f"<span style='font-size:1.2rem;font-weight:900;color:{_ccol};'>{_opp['ticker']}</span>"
-                        f"<span style='font-size:0.7rem;color:#4a5580;background:#1a2040;"
-                        f"border-radius:6px;padding:2px 7px;'>{_opp.get('sector','')}</span>"
-                        f"</div>"
-                        f"<div style='font-size:1.5rem;font-weight:800;color:{_ccol};margin:6px 0 2px;'>"
-                        f"{_dir} {abs(_chg):.1f}%</div>"
-                        f"<div style='font-size:0.72rem;color:#6b7399;'>"
-                        f"Vol {_opp['volume_ratio']:.1f}x · ${_opp['price']:.2f}</div>"
-                        f"<div style='margin:8px 0 4px;'>"
-                        f"<span style='font-size:0.62rem;color:#4a5580;'>CATALIZADOR</span><br/>"
-                        f"<span style='font-size:0.78rem;color:#f5a623;font-weight:600;'>{_sbars} {_score:.0%}</span>"
-                        f"</div>"
-                        f"<div style='font-size:0.68rem;color:#4f9cf9;margin-top:4px;'>{_evts}</div>"
-                        f"<div style='font-size:0.65rem;color:#4a5580;margin-top:6px;"
-                        f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
-                        f"max-width:100%;' title='{_opp.get('headline','')}'>"
-                        f"{_opp.get('headline','')[:55]}{'…' if len(_opp.get('headline',''))>55 else ''}"
-                        f"</div>"
+                        f"<div style='background:#0d1428;border:1px solid #1a2040;border-radius:10px;padding:10px;'>"
+                        f"<span style='font-weight:700;color:#ccd6f6;'>{_vp['ticker']}</span>"
+                        f"<span style='color:{_ccol};font-weight:700;margin-left:8px;'>{_chg:+.1f}%</span>"
+                        f"<div style='font-size:0.65rem;color:#4a5580;'>score {_vp.get('catalyst_score',0):.2f}</div>"
                         f"</div>",
                         unsafe_allow_html=True,
                     )
-            st.divider()
-    except Exception:
-        pass
+    else:
+        st.info("Sin picks volátiles activos. El scanner no encontró movers con catalizador suficiente.")
 
-    # ── Top conviction picks preview ───────────────────────────────────────────
+    # Last 3 volatile closed picks
+    if _vclosed:
+        _recent_closed = sorted(_vclosed, key=lambda x: x.get("last_updated",""), reverse=True)[:3]
+        _row = []
+        for _vp in _recent_closed:
+            _oc    = _vp.get("outcome", "neutral")
+            _icon  = "✓" if _oc == "win" else ("✗" if _oc == "loss" else "○")
+            _ocol  = "#00d4aa" if _oc == "win" else ("#ef5350" if _oc == "loss" else "#6b7399")
+            _row.append(
+                f"<span style='color:{_ocol};font-weight:700;'>{_icon} {_vp['ticker']}</span>"
+                f"<span style='color:#4a5580;font-size:0.75rem;margin-left:4px;'>{_vp.get('pnl_pct',0):+.1f}%</span>"
+            )
+        st.markdown(
+            "<div style='margin-top:8px;font-size:0.78rem;color:#4a5580;'>"
+            "Recientes: " + "  ·  ".join(_row) + "</div>",
+            unsafe_allow_html=True,
+        )
+
+    st.divider()
+
+    # ── Top conviction picks preview (regular 10-day) ──────────────────────────
     if conviction:
         st.markdown(
-            "<div class='section-header'>★ Top Conviction — Vista Rápida</div>",
+            "<div class='section-header'>📈 Top Conviction Multi-día — Vista Rápida</div>",
             unsafe_allow_html=True,
         )
         cols = st.columns(min(len(conviction), 3))
@@ -2752,6 +2826,101 @@ with tab2:
             if key_events:
                 st.markdown("**Eventos detectados:** " +
                             "  ".join(f"`{ev}`" for ev in key_events))
+
+            # ── Entry price position checker ──────────────────────────────────
+            st.divider()
+            with st.expander("¿Ya tienes posición en esta acción?", expanded=False):
+                _cur_price = _data["decision"].get("current_price", 0) or 0
+                _rec       = _data["decision"].get("recommendation", "Wait")
+                _target    = _data["decision"].get("target_price")
+                _stop      = _data["decision"].get("stop_loss")
+                _score     = _data["decision"].get("final_score", 0) or 0
+
+                _ep_col, _ep_info = st.columns([1, 2])
+                with _ep_col:
+                    _entry_price = st.number_input(
+                        "Precio de entrada ($)", min_value=0.01, value=None,
+                        format="%.2f", placeholder="ej. 142.50",
+                        help="El precio al que compraste (o vendiste corto) esta acción",
+                        key=f"entry_price_{ticker_input}",
+                    )
+
+                if _entry_price and _entry_price > 0 and _cur_price > 0:
+                    _pnl = (_cur_price - _entry_price) / _entry_price * 100
+                    _pnl_col = "#00d4aa" if _pnl >= 0 else "#ef5350"
+
+                    with _ep_info:
+                        _ep_c1, _ep_c2, _ep_c3 = st.columns(3)
+                        _ep_c1.metric("P&L actual", f"{_pnl:+.2f}%",
+                                      delta=f"${_cur_price - _entry_price:+.2f}")
+                        if _target:
+                            _upside = (_target - _entry_price) / _entry_price * 100
+                            _ep_c2.metric("Hacia objetivo", f"{_upside:+.1f}%",
+                                          help=f"Objetivo algoritmo: ${_target:.2f}")
+                        if _stop:
+                            _downside = (_stop - _entry_price) / _entry_price * 100
+                            _ep_c3.metric("Hacia stop", f"{_downside:+.1f}%",
+                                          help=f"Stop algoritmo: ${_stop:.2f}")
+
+                    # Contextual recommendation based on position
+                    if _rec == "Buy":
+                        if _pnl >= 8:
+                            _advice = ("🎯 **Considera tomar ganancias parciales** — llevas "
+                                       f"{_pnl:.1f}% y el algoritmo sigue positivo. "
+                                       "Podrías vender 50% y dejar correr el resto.")
+                            _advice_col = "#00d4aa"
+                        elif _pnl >= 0:
+                            _advice = ("⏳ **Mantén posición** — llevas "
+                                       f"{_pnl:.1f}% y la señal sigue siendo compra "
+                                       f"(score {_score:+.3f}). El stop sugerido es "
+                                       f"${_stop:.2f}." if _stop else
+                                       f"(score {_score:+.3f}). Mantén stop loss activo.")
+                            _advice_col = "#4f9cf9"
+                        elif _pnl > -5:
+                            _advice = (f"⚠️ **Posición en negativo** ({_pnl:.1f}%). "
+                                       "El algoritmo sigue en Buy — podrías promediar si "
+                                       "tienes convicción, o esperar confirmación.")
+                            _advice_col = "#f5a623"
+                        else:
+                            _advice = (f"🛑 **Revisar stop loss** — llevas {_pnl:.1f}% y "
+                                       "el algoritmo recomienda Buy pero la caída es "
+                                       "significativa. Evalúa si la tesis sigue válida.")
+                            _advice_col = "#ef5350"
+                    elif _rec == "Sell":
+                        if _pnl <= -5:
+                            _advice = (f"🎯 **Posición corta funcionando** — {_pnl:.1f}% a tu favor. "
+                                       "El algoritmo mantiene señal de venta.")
+                            _advice_col = "#00d4aa"
+                        elif _pnl > 5:
+                            _advice = (f"🛑 **Posición corta en pérdida** ({_pnl:+.1f}%). "
+                                       "El algoritmo sigue en Sell pero el precio subió. "
+                                       "Considera cubrir la posición.")
+                            _advice_col = "#ef5350"
+                        else:
+                            _advice = (f"⏳ **Posición corta neutral** ({_pnl:+.1f}%). "
+                                       "El algoritmo mantiene señal de venta. Espera confirmación.")
+                            _advice_col = "#f5a623"
+                    else:  # Wait
+                        if _pnl >= 5:
+                            _advice = (f"💡 **Toma ganancias** — llevas {_pnl:.1f}% pero el "
+                                       "algoritmo bajó a Wait/Neutral. Podría ser buen momento "
+                                       "para reducir exposición.")
+                            _advice_col = "#f5a623"
+                        elif _pnl < -3:
+                            _advice = (f"⚠️ **Señal deteriorada** — llevas {_pnl:.1f}% y el "
+                                       "algoritmo pasó a Wait. Considera salir si el stop fue superado.")
+                            _advice_col = "#ef5350"
+                        else:
+                            _advice = (f"⏳ **Señal neutral** — llevas {_pnl:.1f}%. El algoritmo "
+                                       "está en espera. Monitorea de cerca.")
+                            _advice_col = "#4a5580"
+
+                    st.markdown(
+                        f"<div style='background:{_advice_col}18;border-left:3px solid {_advice_col};"
+                        f"border-radius:8px;padding:12px 16px;margin-top:8px;'>"
+                        f"{_advice}</div>",
+                        unsafe_allow_html=True,
+                    )
 
             st.divider()
             st.caption(

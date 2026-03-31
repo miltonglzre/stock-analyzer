@@ -230,9 +230,10 @@ def run_autonomous_pipeline(
         results["errors"].append(f"market_scanner: {e}")
         print(f"[WARN] market_scanner failed: {e}")
 
-    # ── Phase 2: Volatile scanner ──────────────────────────────────────────────
+    # ── Phase 2: Volatile scanner + volatile daily picks ─────────────────────
     volatile_candidates = []
     volatile_meta: dict[str, dict] = {}  # ticker → scanner metadata
+    vscan = {}
     try:
         from volatile_scanner import scan_volatile_market
         vscan = scan_volatile_market(force=force_scan, top_n=top_n_volatile)
@@ -244,6 +245,16 @@ def run_autonomous_pipeline(
     except Exception as e:
         results["errors"].append(f"volatile_scanner: {e}")
         print(f"[WARN] volatile_scanner failed: {e}")
+
+    # Update volatile daily picks file (independent 3-day tracker)
+    try:
+        from volatile_daily_picks import generate_volatile_picks
+        vp = generate_volatile_picks(vscan)
+        results["volatile_picks_active"] = len(vp.get("active_picks", []))
+        print(f"[Phase 2b] Volatile daily picks: {results['volatile_picks_active']} active")
+    except Exception as e:
+        results["errors"].append(f"volatile_daily_picks: {e}")
+        print(f"[WARN] volatile_daily_picks failed: {e}")
 
     # ── Phase 3: Analyze regular picks ────────────────────────────────────────
     print(f"\n[Phase 3] Analyzing {len(regular_candidates)} regular tickers...")
