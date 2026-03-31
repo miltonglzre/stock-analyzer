@@ -250,9 +250,14 @@ def generate_daily_picks(scan_data: dict) -> dict:
             existing.get("top_5_conviction", []), price_map, now_str
         )
 
-        # Move newly closed picks to closed list
-        newly_closed = closed_10 + closed_conv
-        closed_list  = existing.get("closed_picks", []) + newly_closed
+        # Move newly closed picks to closed list — deduplicate by ticker
+        seen_closed = set()
+        newly_closed = []
+        for p in closed_10 + closed_conv:
+            if p["ticker"] not in seen_closed:
+                newly_closed.append(p)
+                seen_closed.add(p["ticker"])
+        closed_list = existing.get("closed_picks", []) + newly_closed
 
         # Remove closed picks from active lists (keep in closed_picks only)
         top10_active = [p for p in top10_updated  if p["status"] == "active"]
@@ -289,6 +294,12 @@ def generate_daily_picks(scan_data: dict) -> dict:
                 conv_active.append(_build_pick(r, now_str))
 
         conv_active.sort(key=lambda x: abs(x.get("current_score", x["score"])), reverse=True)
+
+        # Deduplicate closed_list (keep last occurrence per ticker — most recent close)
+        seen: dict = {}
+        for p in closed_list:
+            seen[p["ticker"]] = p
+        closed_list = list(seen.values())
 
         # Stats
         wins   = sum(1 for p in closed_list if p.get("outcome") == "win")
